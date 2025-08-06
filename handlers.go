@@ -392,7 +392,8 @@ func processDeploy(req CreateLanderRequest) error {
 
 	// Apply tracking domain customization to the deployed HTML
 	siteDir := "/var/www/" + fullDomain
-	return injectCampaignParams(siteDir+"/index.html", req.CampaignID, req.LandingPageID, req.TrackingDomain)
+	deploymentURL := fmt.Sprintf("https://%s", fullDomain)
+	return injectCampaignParams(siteDir+"/index.html", req.CampaignID, req.LandingPageID, req.TrackingDomain, deploymentURL)
 }
 
 // 📁 Process path-based deployment with folder duplication
@@ -464,7 +465,8 @@ func processPathBasedDeploy(req CreateLanderRequest, fullDomain string) error {
 	}
 	
 	// Update the HTML file with campaign parameters
-	return injectCampaignParams(pathDir+"/index.html", req.CampaignID, req.LandingPageID, req.TrackingDomain)
+	deploymentURL := fmt.Sprintf("https://%s", fullDomain)
+	return injectCampaignParams(pathDir+"/index.html", req.CampaignID, req.LandingPageID, req.TrackingDomain, deploymentURL)
 }
 
 // 🔢 Find the next available path number
@@ -480,7 +482,7 @@ func findNextAvailablePath(domain string) string {
 }
 
 // 💉 Inject campaign parameters into HTML file
-func injectCampaignParams(htmlPath, campaignID, landingPageID, trackingDomain string) error {
+func injectCampaignParams(htmlPath, campaignID, landingPageID, trackingDomain, deploymentURL string) error {
 	content, err := os.ReadFile(htmlPath)
 	if err != nil {
 		return fmt.Errorf("failed to read HTML file: %v", err)
@@ -493,17 +495,20 @@ func injectCampaignParams(htmlPath, campaignID, landingPageID, trackingDomain st
 		trackingDomain = "track.puritysalt.com"
 	}
 	
-	// Replace the existing cpid and lpid values in the tracking script
+	// Replace the existing cpid, lpid, and lpurl values in the tracking script
 	// Look for the existing tracking script and replace the values
 	oldCpidPattern := `var cpid = '[^']*';`
 	oldLpidPattern := `var lpid = '[^']*';`
+	oldLpurlPattern := `var lpurl = '[^']*';`
 	
 	newCpid := fmt.Sprintf("var cpid = '%s';", campaignID)
 	newLpid := fmt.Sprintf("var lpid = '%s';", landingPageID)
+	newLpurl := fmt.Sprintf("var lpurl = '%s';", deploymentURL)
 	
-	// Replace existing cpid and lpid values
+	// Replace existing cpid, lpid, and lpurl values
 	htmlContent = regexp.MustCompile(oldCpidPattern).ReplaceAllString(htmlContent, newCpid)
 	htmlContent = regexp.MustCompile(oldLpidPattern).ReplaceAllString(htmlContent, newLpid)
+	htmlContent = regexp.MustCompile(oldLpurlPattern).ReplaceAllString(htmlContent, newLpurl)
 	
 	// Replace all tracking domain URLs in the HTML
 	oldTrackingPattern := `https://track\.puritysalt\.com`
