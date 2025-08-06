@@ -5,10 +5,27 @@
 
 echo "🔒 Setting up SSL provisioning for ServerTrack Satellites..."
 
-# Copy SSL provisioning scripts
-cp /root/provision-ssl.sh /usr/local/bin/provision-ssl.sh 2>/dev/null || echo "⚠️  provision-ssl.sh not found, creating basic version"
-cp /root/setup-dynamic-nginx.sh /usr/local/bin/setup-dynamic-nginx.sh 2>/dev/null || echo "⚠️  setup-dynamic-nginx.sh not found"
-cp /root/dynamic-wildcard-nginx.conf /etc/nginx/sites-available/dynamic-wildcard 2>/dev/null || echo "⚠️  dynamic-wildcard-nginx.conf not found"
+# Copy SSL provisioning scripts from local directory if available
+if [ -f "./provision-ssl.sh" ]; then
+    cp ./provision-ssl.sh /usr/local/bin/provision-ssl.sh
+    echo "✅ Copied provision-ssl.sh"
+else
+    echo "⚠️  provision-ssl.sh not found locally, creating basic version"
+fi
+
+if [ -f "./setup-dynamic-nginx.sh" ]; then
+    cp ./setup-dynamic-nginx.sh /usr/local/bin/setup-dynamic-nginx.sh
+    echo "✅ Copied setup-dynamic-nginx.sh"
+else
+    echo "⚠️  setup-dynamic-nginx.sh not found locally"
+fi
+
+if [ -f "./dynamic-wildcard-nginx.conf" ]; then
+    cp ./dynamic-wildcard-nginx.conf /etc/nginx/sites-available/dynamic-wildcard
+    echo "✅ Copied dynamic-wildcard-nginx.conf"
+else
+    echo "⚠️  dynamic-wildcard-nginx.conf not found locally"
+fi
 
 # Make scripts executable
 chmod +x /usr/local/bin/provision-ssl.sh 2>/dev/null
