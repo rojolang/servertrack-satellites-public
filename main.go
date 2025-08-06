@@ -23,10 +23,11 @@ import (
 
 // API Request/Response Types with comprehensive validation
 type CreateLanderRequest struct {
-	CampaignID    string `json:"campaign_id" validate:"required,min=1,max=100"`
-	LandingPageID string `json:"landing_page_id" validate:"required,min=1,max=100"`
-	Subdomain     string `json:"subdomain" validate:"required,min=1,max=50,alphanum"`
-	RequestID     string `json:"request_id,omitempty"`
+	CampaignID     string `json:"campaign_id" validate:"required,min=1,max=100"`
+	LandingPageID  string `json:"landing_page_id" validate:"required,min=1,max=100"`
+	Subdomain      string `json:"subdomain" validate:"required,min=1,max=50,alphanum"`
+	TrackingDomain string `json:"tracking_domain,omitempty"`
+	RequestID      string `json:"request_id,omitempty"`
 }
 
 type CreateLanderResponse struct {

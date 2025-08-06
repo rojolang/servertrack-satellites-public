@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -374,7 +375,11 @@ func processDeploy(req CreateLanderRequest) error {
 
 	// Regular deployment for domain-only requests
 	scriptPath := "/root/templates/quick-deploy.sh"
-	cmd := exec.Command("bash", scriptPath, fullDomain, req.CampaignID, req.LandingPageID)
+	trackingDomain := req.TrackingDomain
+	if trackingDomain == "" {
+		trackingDomain = "track.puritysalt.com"
+	}
+	cmd := exec.Command("bash", scriptPath, fullDomain, req.CampaignID, req.LandingPageID, trackingDomain)
 	output, err := cmd.CombinedOutput()
 	
 	if err != nil {
@@ -385,7 +390,9 @@ func processDeploy(req CreateLanderRequest) error {
 		return err
 	}
 
-	return nil
+	// Apply tracking domain customization to the deployed HTML
+	siteDir := "/var/www/" + fullDomain
+	return injectCampaignParams(siteDir+"/index.html", req.CampaignID, req.LandingPageID, req.TrackingDomain)
 }
 
 // 📁 Process path-based deployment with folder duplication
@@ -417,7 +424,11 @@ func processPathBasedDeploy(req CreateLanderRequest, fullDomain string) error {
 	if _, err := os.Stat(baseDir); os.IsNotExist(err) || !nginxConfigExists {
 		// Deploy base domain first using the deployment script
 		scriptPath := "/root/templates/quick-deploy.sh"
-		cmd := exec.Command("bash", scriptPath, domain, req.CampaignID, req.LandingPageID)
+		trackingDomain := req.TrackingDomain
+		if trackingDomain == "" {
+			trackingDomain = "track.puritysalt.com"
+		}
+		cmd := exec.Command("bash", scriptPath, domain, req.CampaignID, req.LandingPageID, trackingDomain)
 		if output, err := cmd.CombinedOutput(); err != nil {
 			logger.WithFields(logrus.Fields{
 				"request_id": req.RequestID,
@@ -453,7 +464,7 @@ func processPathBasedDeploy(req CreateLanderRequest, fullDomain string) error {
 	}
 	
 	// Update the HTML file with campaign parameters
-	return injectCampaignParams(pathDir+"/index.html", req.CampaignID, req.LandingPageID)
+	return injectCampaignParams(pathDir+"/index.html", req.CampaignID, req.LandingPageID, req.TrackingDomain)
 }
 
 // 🔢 Find the next available path number
@@ -469,7 +480,7 @@ func findNextAvailablePath(domain string) string {
 }
 
 // 💉 Inject campaign parameters into HTML file
-func injectCampaignParams(htmlPath, campaignID, landingPageID string) error {
+func injectCampaignParams(htmlPath, campaignID, landingPageID, trackingDomain string) error {
 	content, err := os.ReadFile(htmlPath)
 	if err != nil {
 		return fmt.Errorf("failed to read HTML file: %v", err)
@@ -477,12 +488,33 @@ func injectCampaignParams(htmlPath, campaignID, landingPageID string) error {
 	
 	htmlContent := string(content)
 	
-	// Inject campaign parameters into the HTML
-	// Add script before closing </head> tag
+	// Use default tracking domain if none provided
+	if trackingDomain == "" {
+		trackingDomain = "track.puritysalt.com"
+	}
+	
+	// Replace the existing cpid and lpid values in the tracking script
+	// Look for the existing tracking script and replace the values
+	oldCpidPattern := `var cpid = '[^']*';`
+	oldLpidPattern := `var lpid = '[^']*';`
+	
+	newCpid := fmt.Sprintf("var cpid = '%s';", campaignID)
+	newLpid := fmt.Sprintf("var lpid = '%s';", landingPageID)
+	
+	// Replace existing cpid and lpid values
+	htmlContent = regexp.MustCompile(oldCpidPattern).ReplaceAllString(htmlContent, newCpid)
+	htmlContent = regexp.MustCompile(oldLpidPattern).ReplaceAllString(htmlContent, newLpid)
+	
+	// Replace all tracking domain URLs in the HTML
+	oldTrackingPattern := `https://track\.puritysalt\.com`
+	newTrackingURL := fmt.Sprintf("https://%s", trackingDomain)
+	htmlContent = regexp.MustCompile(oldTrackingPattern).ReplaceAllString(htmlContent, newTrackingURL)
+	
+	// Also inject our own tracking variables for additional compatibility
 	scriptInjection := fmt.Sprintf(`<script>
-		// Campaign configuration injected by ServerTrack
-		window.CAMPAIGN_ID = '%s';
-		window.LANDING_PAGE_ID = '%s';
+		// ServerTrack campaign configuration
+		window.SERVERTRACK_CAMPAIGN_ID = '%s';
+		window.SERVERTRACK_LANDING_PAGE_ID = '%s';
 		
 		// Auto-append parameters if not present
 		if (!window.location.search.includes('cpid')) {
@@ -494,7 +526,7 @@ func injectCampaignParams(htmlPath, campaignID, landingPageID string) error {
 	</script>
 	</head>`, campaignID, landingPageID, campaignID, landingPageID)
 	
-	// Replace </head> with our script injection
+	// Add our script before closing </head> tag
 	htmlContent = strings.Replace(htmlContent, "</head>", scriptInjection, 1)
 	
 	// Write updated content back

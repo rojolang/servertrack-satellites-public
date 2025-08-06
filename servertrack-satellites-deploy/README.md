@@ -49,7 +49,7 @@ ServerTrack Satellites automatically:
 
 ## 🎯 API Usage
 
-**Deploy a campaign:**
+**Deploy a campaign (basic):**
 ```bash
 curl -X POST http://YOUR-SERVER-IP:8080/api/v1/lander \
   -H "Content-Type: application/json" \
@@ -57,6 +57,30 @@ curl -X POST http://YOUR-SERVER-IP:8080/api/v1/lander \
     "campaign_id": "your-voluum-campaign-id",
     "landing_page_id": "your-voluum-lander-id", 
     "subdomain": "your-domain.com"
+  }'
+```
+
+**Deploy with custom tracking domain:**
+```bash
+curl -X POST http://YOUR-SERVER-IP:8080/api/v1/lander \
+  -H "Content-Type: application/json" \
+  -d '{
+    "campaign_id": "your-voluum-campaign-id",
+    "landing_page_id": "your-voluum-lander-id", 
+    "subdomain": "fb.puritysalt.com/1/",
+    "tracking_domain": "custom.track.domain.com"
+  }'
+```
+
+**Path-based deployment:**
+```bash
+# Creates fb.puritysalt.com/1/, fb.puritysalt.com/2/, etc.
+curl -X POST http://YOUR-SERVER-IP:8080/api/v1/lander \
+  -H "Content-Type: application/json" \
+  -d '{
+    "campaign_id": "test-campaign",
+    "landing_page_id": "test-lander",
+    "subdomain": "fb.puritysalt.com/1/"
   }'
 ```
 
@@ -74,6 +98,8 @@ curl http://YOUR-SERVER-IP:8080/api/v1/landers
 
 - **Turn-key installation** - Zero manual configuration
 - **API-driven deployment** - RESTful endpoints
+- **Path-based deployments** - `/1/`, `/2/`, `/3/` auto-increment
+- **Custom tracking domains** - Override default tracking URLs
 - **Worker pool architecture** - Concurrent processing  
 - **Structured JSON logging** - Request tracking
 - **Automatic SSL** - Certbot integration
