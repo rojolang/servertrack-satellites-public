@@ -1,78 +1,149 @@
 #!/bin/bash
 
-# 🛰️ ServerTrack Satellites - Public Installer
-# Downloads and installs ServerTrack Satellites from GitHub
+# 🛰️ ServerTrack Satellites - Public Release Installer
+# Downloads and installs the latest binary release from GitHub
 
 set -e
 
-# Colors
+# Beautiful colors for output
+RED='\033[0;31m'
 GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 PURPLE='\033[0;35m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
 NC='\033[0m'
 
-log() { echo -e "${GREEN}✅ $1${NC}"; }
-step() { echo -e "${BLUE}🔹 $1${NC}"; }
-error() { echo -e "${RED}💥 $1${NC}"; exit 1; }
+RELEASE_URL="https://api.github.com/repos/rojolang/servertrack-satellites-public/releases/latest"
+BINARY_NAME="servertrack-satellites"
+INSTALL_DIR="/usr/local/bin"
+SERVICE_NAME="servertrack-satellites"
 
-echo -e "${PURPLE}🛰️ ServerTrack Satellites - Public Installer${NC}"
-echo ""
+# ASCII Art Banner
+show_banner() {
+    echo -e "${PURPLE}${BOLD}"
+    echo "  ╔═══════════════════════════════════════════════════╗"
+    echo "  ║          🛰️ ServerTrack Satellites 🛰️          ║"
+    echo "  ║         Production Ready Deployment               ║"
+    echo "  ║                                                   ║"
+    echo "  ║    🚀 Public Release Installer 🚀               ║"
+    echo "  ╚═══════════════════════════════════════════════════╝"
+    echo -e "${NC}"
+    echo -e "${CYAN}One-line installer for production deployment${NC}"
+    echo ""
+}
 
-# Check Ubuntu
-if ! grep -q "Ubuntu" /etc/os-release 2>/dev/null; then
-    error "This script requires Ubuntu 22.04 or 24.04"
-fi
+log() {
+    echo -e "${GREEN}✨ $1${NC}"
+}
 
-# Check root
+step() {
+    echo -e "${BLUE}🔹 $1${NC}"
+}
+
+warn() {
+    echo -e "${YELLOW}⚠️  $1${NC}"
+}
+
+error() {
+    echo -e "${RED}💥 $1${NC}"
+    exit 1
+}
+
+success() {
+    echo -e "${GREEN}${BOLD}🎉 $1${NC}"
+}
+
+show_banner
+
+# Check if running as root
 if [[ $EUID -ne 0 ]]; then
-   error "This script must be run as root. Use: sudo $0"
+   error "This script must be run as root (use sudo)"
 fi
 
-UBUNTU_VERSION=$(lsb_release -rs 2>/dev/null || grep VERSION_ID /etc/os-release | cut -d'"' -f2)
-log "Ubuntu ${UBUNTU_VERSION} detected"
+step "Detecting system..."
+if ! command -v curl &> /dev/null; then
+    step "Installing curl..."
+    apt update -qq && apt install -y curl
+fi
 
-# Create temp directory
-TMP_DIR=$(mktemp -d)
-cd "$TMP_DIR"
+step "Fetching latest release information..."
+LATEST_RELEASE=$(curl -s "$RELEASE_URL" | grep -o '"browser_download_url": "[^"]*' | grep -o '[^"]*$' | grep "$BINARY_NAME")
 
-step "Downloading ServerTrack Satellites..."
+if [ -z "$LATEST_RELEASE" ]; then
+    error "Failed to fetch latest release URL"
+fi
 
-# GitHub URLs for releases and raw files (PUBLIC REPOSITORY)
-RELEASE_URL="https://github.com/rojolang/servertrack-satellites-public/releases/latest/download"
-RAW_URL="https://raw.githubusercontent.com/rojolang/servertrack-satellites-public/main"
+log "Found latest release: $LATEST_RELEASE"
 
-# Download installer and binary
-curl -fsSL "${RAW_URL}/install.sh" -o install.sh || error "Failed to download installer"
-curl -fsSL "${RELEASE_URL}/servertrack-satellites" -o servertrack-satellites || error "Failed to download binary from releases"
+step "Stopping existing service if running..."
+systemctl stop "$SERVICE_NAME" 2>/dev/null || true
 
-chmod +x install.sh servertrack-satellites
+step "Downloading latest binary..."
+curl -L -o "/tmp/$BINARY_NAME" "$LATEST_RELEASE"
 
-log "Downloaded successfully!"
+step "Installing binary to $INSTALL_DIR..."
+mv "/tmp/$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
+chmod +x "$INSTALL_DIR/$BINARY_NAME"
 
-step "Running installer..."
+step "Creating systemd service..."
+cat > "/etc/systemd/system/$SERVICE_NAME.service" << EOF
+[Unit]
+Description=ServerTrack Satellites - Landing Page Deployment API
+After=network.target
+StartLimitIntervalSec=0
 
-# Run the installer
-bash install.sh
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=root
+Environment=PORT=8080
+WorkingDirectory=/root
+ExecStart=$INSTALL_DIR/$BINARY_NAME
 
-# Cleanup
-cd /root
-rm -rf "$TMP_DIR"
+[Install]
+WantedBy=multi-user.target
+EOF
 
-# Get server IP
-SERVER_IP=$(curl -s ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')
+step "Enabling and starting service..."
+systemctl daemon-reload
+systemctl enable "$SERVICE_NAME"
+systemctl start "$SERVICE_NAME"
 
-echo ""
-echo -e "${PURPLE}🎉 PUBLIC INSTALLATION COMPLETE! 🎉${NC}"
-echo ""
-echo -e "${GREEN}📡 Server IP: $SERVER_IP${NC}"
-echo -e "${GREEN}🌐 API: http://$SERVER_IP:8080${NC}"
-echo -e "${GREEN}🔍 Health: http://$SERVER_IP:8080/health${NC}"
-echo ""
-echo -e "${BLUE}🚀 Test deployment:${NC}"
-echo -e "curl -X POST http://$SERVER_IP:8080/api/v1/lander \\"
-echo -e "  -H 'Content-Type: application/json' \\"
-echo -e "  -d '{\"campaign_id\":\"test\",\"landing_page_id\":\"lp1\",\"subdomain\":\"demo.puritysalt.com\"}'"
-echo ""
-echo -e "${GREEN}✨ ServerTrack Satellites is LIVE! ✨${NC}"
+sleep 3
+
+step "Verifying installation..."
+if systemctl is-active --quiet "$SERVICE_NAME"; then
+    success "ServerTrack Satellites installed successfully!"
+    
+    # Get server IP
+    SERVER_IP=$(curl -s ifconfig.me 2>/dev/null || echo "localhost")
+    
+    echo ""
+    echo -e "${PURPLE}${BOLD}🌟 Installation Complete! 🌟${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}📡 Service Status:${NC}"
+    systemctl status "$SERVICE_NAME" --no-pager -l
+    echo ""
+    echo -e "${BOLD}🌐 API Endpoints:${NC}"
+    echo -e "   🌐 ${GREEN}http://${SERVER_IP}:8080${NC}"
+    echo -e "   🌐 ${GREEN}http://localhost:8080${NC}"
+    echo ""
+    echo -e "${BOLD}🎯 Test Commands:${NC}"
+    echo -e "   ${CYAN}curl http://localhost:8080/health${NC}"
+    echo -e "   ${CYAN}curl http://localhost:8080/api/v1/provision -X POST -H 'Content-Type: application/json' -d '{\"github_repo\":\"Hairetsucodes/lander-rojo-original\",\"campaign_id\":\"test123\",\"lpurl\":\"https://example.com\"}'${NC}"
+    echo ""
+    echo -e "${BOLD}📝 Management:${NC}"
+    echo -e "   ${YELLOW}systemctl status $SERVICE_NAME${NC}     # Check status"
+    echo -e "   ${YELLOW}journalctl -u $SERVICE_NAME -f${NC}     # View logs"
+    echo -e "   ${YELLOW}systemctl restart $SERVICE_NAME${NC}    # Restart service"
+    echo ""
+    echo -e "${PURPLE}🛰️ Ready for production deployment! 🛰️${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    
+else
+    error "Installation failed. Check logs with: journalctl -u $SERVICE_NAME -f"
+fi
