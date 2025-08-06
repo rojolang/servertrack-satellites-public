@@ -39,9 +39,9 @@ cd "$TMP_DIR"
 
 step "Downloading ServerTrack Satellites..."
 
-# GitHub URLs for releases and raw files
-RELEASE_URL="https://github.com/rojolang/servertrack-satellite/releases/latest/download"
-RAW_URL="https://raw.githubusercontent.com/rojolang/servertrack-satellite/main"
+# GitHub URLs for releases and raw files (PUBLIC REPOSITORY)
+RELEASE_URL="https://github.com/rojolang/servertrack-satellites-public/releases/latest/download"
+RAW_URL="https://raw.githubusercontent.com/rojolang/servertrack-satellites-public/main"
 
 # Download installer and binary
 curl -fsSL "${RAW_URL}/install.sh" -o install.sh || error "Failed to download installer"
