@@ -29,6 +29,7 @@ ServerTrack Satellites automatically:
 - ✅ **Installs all dependencies** (nginx, certbot, etc.)  
 - ✅ **Configures SSL certificates** with auto-renewal
 - ✅ **Provides campaign deployment API** with Voluum integration
+- ✅ **Fresh GitHub template integration** (https://github.com/Hairetsucodes/lander-rojo-original)
 - ✅ **Facebook ad compliance** (stealth tracking)
 - ✅ **Production monitoring** and verbose logging
 
@@ -113,6 +114,8 @@ curl http://YOUR-SERVER-IP:8080/api/v1/landers
 - **Installation time:** ~45 seconds
 - **Deployment time:** ~6 seconds per campaign
 - **Concurrent capacity:** 4 simultaneous deployments
+- **Template source:** Fresh GitHub repo (auto-pulled)
+- **Nginx config:** Clean routing without parameter injection
 
 ---
 

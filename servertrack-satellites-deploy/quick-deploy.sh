@@ -43,7 +43,7 @@ else
 fi
 
 # Copy template files
-step "Copying landing page template..."
+step "Copying fresh landing page template from GitHub..."
 if cp -r /var/www/template/* "$SITE_DIR/"; then
     log "Template files copied successfully"
     chown -R www-data:www-data "$SITE_DIR"
