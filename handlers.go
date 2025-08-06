@@ -515,24 +515,7 @@ func injectCampaignParams(htmlPath, campaignID, landingPageID, trackingDomain, d
 	newTrackingURL := fmt.Sprintf("https://%s", trackingDomain)
 	htmlContent = regexp.MustCompile(oldTrackingPattern).ReplaceAllString(htmlContent, newTrackingURL)
 	
-	// Also inject our own tracking variables for additional compatibility
-	scriptInjection := fmt.Sprintf(`<script>
-		// ServerTrack campaign configuration
-		window.SERVERTRACK_CAMPAIGN_ID = '%s';
-		window.SERVERTRACK_LANDING_PAGE_ID = '%s';
-		
-		// Auto-append parameters if not present
-		if (!window.location.search.includes('cpid')) {
-			const currentParams = new URLSearchParams(window.location.search);
-			currentParams.set('cpid', '%s');
-			currentParams.set('lpid', '%s');
-			history.replaceState(null, '', '?' + currentParams.toString());
-		}
-	</script>
-	</head>`, campaignID, landingPageID, campaignID, landingPageID)
-	
-	// Add our script before closing </head> tag
-	htmlContent = strings.Replace(htmlContent, "</head>", scriptInjection, 1)
+	// No additional script injection needed - template already has tracking script
 	
 	// Write updated content back
 	return os.WriteFile(htmlPath, []byte(htmlContent), 0644)
