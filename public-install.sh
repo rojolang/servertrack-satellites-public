@@ -69,13 +69,18 @@ if ! command -v curl &> /dev/null; then
 fi
 
 step "Fetching latest release information..."
-LATEST_RELEASE=$(curl -s "$RELEASE_URL" | grep -o '"browser_download_url": "[^"]*' | grep -o '[^"]*$' | grep "$BINARY_NAME")
+# Get the latest release tag
+LATEST_TAG=$(curl -s "$RELEASE_URL" | grep -o '"tag_name": "[^"]*' | cut -d'"' -f4)
 
-if [ -z "$LATEST_RELEASE" ]; then
-    error "Failed to fetch latest release URL"
+if [ -z "$LATEST_TAG" ]; then
+    error "Failed to fetch latest release tag"
 fi
 
-log "Found latest release: $LATEST_RELEASE"
+log "Found latest release tag: $LATEST_TAG"
+
+# Construct the download URL
+LATEST_RELEASE="https://github.com/rojolang/servertrack-satellites-public/releases/download/$LATEST_TAG/$BINARY_NAME"
+log "Download URL: $LATEST_RELEASE"
 
 step "Stopping existing service if running..."
 systemctl stop "$SERVICE_NAME" 2>/dev/null || true
