@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -12,47 +11,39 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// Rate limiter with beautiful concurrency
-type RateLimiter struct {
-	requests map[string][]time.Time
-	mutex    sync.RWMutex
-	limit    int
-	window   time.Duration
+
+// 🛡️ Security Headers Middleware - Adds comprehensive security headers
+func securityHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Security headers to prevent common attacks
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'")
+		
+		// Security headers for API responses
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
+		
+		// Server identification (minimal for security)
+		w.Header().Set("Server", "ServerTrack-Satellites/2.0")
+		
+		next.ServeHTTP(w, r)
+	})
 }
 
-func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
-	return &RateLimiter{
-		requests: make(map[string][]time.Time),
-		limit:    limit,
-		window:   window,
-	}
+// 📏 Request Size Middleware - Limits request body size for security
+func requestSizeMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Limit request body size to prevent DoS attacks
+		r.Body = http.MaxBytesReader(w, r.Body, config.MaxRequestSize)
+		
+		next.ServeHTTP(w, r)
+	})
 }
-
-func (rl *RateLimiter) Allow(clientIP string) bool {
-	rl.mutex.Lock()
-	defer rl.mutex.Unlock()
-
-	now := time.Now()
-	requests := rl.requests[clientIP]
-
-	// Clean old requests outside the window
-	var validRequests []time.Time
-	for _, reqTime := range requests {
-		if now.Sub(reqTime) < rl.window {
-			validRequests = append(validRequests, reqTime)
-		}
-	}
-
-	if len(validRequests) >= rl.limit {
-		return false
-	}
-
-	validRequests = append(validRequests, now)
-	rl.requests[clientIP] = validRequests
-	return true
-}
-
-var rateLimiter = NewRateLimiter(100, time.Minute) // 100 requests per minute
 
 // 🎯 Request ID Middleware - Adds unique tracking to every request
 func requestIDMiddleware(next http.Handler) http.Handler {
@@ -150,33 +141,6 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// 🚦 Rate Limiting Middleware - Beautiful traffic control
-func rateLimitMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		clientIP := getClientIP(r)
-		
-		if !rateLimiter.Allow(clientIP) {
-			logger.WithFields(logrus.Fields{
-				"client_ip":  clientIP,
-				"path":       r.URL.Path,
-				"request_id": getRequestID(r),
-			}).Warn("🚦 Rate limit exceeded")
-
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusTooManyRequests)
-			response := map[string]interface{}{
-				"success": false,
-				"error":   "Rate limit exceeded",
-				"message": "🛰️ Satellites are busy! Please try again in a moment.",
-				"request_id": getRequestID(r),
-			}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
 
 // Response writer wrapper to capture status codes
 type responseWriter struct {

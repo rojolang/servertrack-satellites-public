@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -61,14 +60,6 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 				"returns":     "Deployment progress and completion status",
 			},
 		},
-		"system": map[string]interface{}{
-			"go_version":     runtime.Version(),
-			"architecture":   runtime.GOARCH,
-			"operating_system": runtime.GOOS,
-			"cpu_cores":      runtime.NumCPU(),
-			"goroutines":     runtime.NumGoroutine(),
-			"worker_pool":    runtime.NumCPU() * 2,
-		},
 		"author": "ServerTrack Team",
 		"motto":  "🛰️ Elegant automation, beautiful results",
 		"uptime": time.Since(startTime).String(),
@@ -79,11 +70,8 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// 🏥 Enhanced Health Handler with comprehensive system monitoring
+// 🏥 Health Handler for basic system status
 func healthHandler(w http.ResponseWriter, r *http.Request) {
-	var memStats runtime.MemStats
-	runtime.ReadMemStats(&memStats)
-
 	response := map[string]interface{}{
 		"status":      "healthy",
 		"timestamp":   time.Now().UTC(),
@@ -91,75 +79,26 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 		"service":     "ServerTrack Satellites API",
 		"version":     "2.0.0",
 		"environment": "production",
-		"system": map[string]interface{}{
-			"memory": map[string]interface{}{
-				"allocated_mb": memStats.Alloc / 1024 / 1024,
-				"total_mb":     memStats.TotalAlloc / 1024 / 1024,
-				"sys_mb":       memStats.Sys / 1024 / 1024,
-				"gc_cycles":    memStats.NumGC,
-			},
-			"runtime": map[string]interface{}{
-				"goroutines": runtime.NumGoroutine(),
-				"cpu_cores":  runtime.NumCPU(),
-				"go_version": runtime.Version(),
-			},
-			"performance": map[string]interface{}{
-				"request_count":    atomic.LoadInt64(&metrics.RequestCount),
-				"active_requests":  atomic.LoadInt64(&metrics.ActiveRequests),
-				"total_deployments": atomic.LoadInt64(&metrics.TotalDeployments),
-				"average_latency":  metrics.AverageLatency.String(),
-				"uptime":          time.Since(startTime).String(),
-			},
-		},
-		"motto": "🛰️ Elegant automation, beautiful results",
+		"motto":       "🛰️ Elegant automation, beautiful results",
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
 
-// 📊 Beautiful Metrics Handler for real-time insights
+// 📊 Simple Metrics Handler 
 func metricsHandler(w http.ResponseWriter, r *http.Request) {
-	var memStats runtime.MemStats
-	runtime.ReadMemStats(&memStats)
-
 	uptime := time.Since(startTime)
 	requestCount := atomic.LoadInt64(&metrics.RequestCount)
 	deployments := atomic.LoadInt64(&metrics.TotalDeployments)
 
-	successRate := float64(100)
-	if requestCount > 0 {
-		successRate = (float64(deployments) / float64(requestCount)) * 100
-	}
-
 	response := map[string]interface{}{
-		"service": "ServerTrack Satellites Metrics",
+		"service":   "ServerTrack Satellites Metrics",
 		"timestamp": time.Now().UTC(),
-		"metrics": map[string]interface{}{
-			"requests": map[string]interface{}{
-				"total":          requestCount,
-				"active":         atomic.LoadInt64(&metrics.ActiveRequests),
-				"per_second":     float64(requestCount) / uptime.Seconds(),
-				"per_minute":     float64(requestCount) / uptime.Minutes(),
-			},
-			"deployments": map[string]interface{}{
-				"total":        deployments,
-				"success_rate": fmt.Sprintf("%.2f%%", successRate),
-				"per_hour":     float64(deployments) / uptime.Hours(),
-			},
-			"performance": map[string]interface{}{
-				"average_latency": metrics.AverageLatency.String(),
-				"uptime":          uptime.String(),
-				"uptime_seconds":  uptime.Seconds(),
-			},
-			"system": map[string]interface{}{
-				"memory_usage_mb": memStats.Alloc / 1024 / 1024,
-				"goroutines":      runtime.NumGoroutine(),
-				"cpu_cores":       runtime.NumCPU(),
-				"worker_pool":     runtime.NumCPU() * 2,
-			},
-		},
-		"status": "🛰️ All satellites reporting nominal performance",
+		"requests":  requestCount,
+		"deployments": deployments,
+		"uptime":    uptime.String(),
+		"status":    "🛰️ All satellites operational",
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -298,11 +237,7 @@ func listLandersHandler(w http.ResponseWriter, r *http.Request) {
 		"request_id":  requestID,
 		"total_count": len(landers),
 		"satellites":  landers,
-		"system": map[string]interface{}{
-			"total_deployments": atomic.LoadInt64(&metrics.TotalDeployments),
-			"active_requests":   atomic.LoadInt64(&metrics.ActiveRequests),
-		},
-		"message": fmt.Sprintf("🛰️ Found %d active satellite deployments", len(landers)),
+		"message":     fmt.Sprintf("🛰️ Found %d active satellite deployments", len(landers)),
 	}
 
 	logger.WithFields(logrus.Fields{
