@@ -1,124 +1,264 @@
-# 🛰️ ServerTrack Satellites - Public Binary Distribution
+# 🛰️ ServerTrack Satellites - Turn-Key Landing Page Deployment
 
-**Turn-key landing page deployment system with Voluum tracking integration.**
+**The ultimate turn-key solution for automated campaign deployment with Voluum integration.**
 
-## ⚡ Quick Installation
+## ⚡ Quick Start - One Command Installation
 
-**One-line installation on Ubuntu servers:**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/rojolang/servertrack-satellites-public/main/public-install.sh | sudo bash
-```
-
-## 📦 Manual Installation
+Install and run ServerTrack Satellites on any Ubuntu server:
 
 ```bash
-# Download binary from releases
-curl -fsSL https://github.com/rojolang/servertrack-satellites-public/releases/latest/download/servertrack-satellites -o servertrack-satellites
-chmod +x servertrack-satellites
-
-# Run directly
-sudo ./servertrack-satellites
+curl -fsSL https://raw.githubusercontent.com/rojolang/servertrack-satellites/main/install.sh | bash
 ```
 
-## 🚀 What It Does
+## 🎯 What This Does
 
-ServerTrack Satellites automatically:
+ServerTrack Satellites is a **production-ready API service** that:
 
-- ✅ **Sets up production API server** on port 8080
-- ✅ **Installs all dependencies** (nginx, certbot, etc.)  
-- ✅ **Configures SSL certificates** with auto-renewal
-- ✅ **Provides campaign deployment API** with Voluum integration
-- ✅ **Fresh GitHub template integration** (https://github.com/Hairetsucodes/lander-rojo-original)
-- ✅ **Facebook ad compliance** (stealth tracking)
-- ✅ **Production monitoring** and verbose logging
+- ✅ **Deploys landing pages instantly** with Voluum tracking integration
+- ✅ **Handles nginx configuration** automatically with SSL certificates  
+- ✅ **Manages campaign parameters** with stealth Facebook ad compliance
+- ✅ **Processes concurrent deployments** with worker pool architecture
+- ✅ **Provides comprehensive logging** with structured JSON output
+- ✅ **Includes security hardening** with proper headers and validation
+
+## 🔧 API Endpoints
+
+### POST /api/v1/lander
+Deploy a new landing page campaign:
+
+#### Basic Domain Deployment
+```bash
+curl -X POST http://localhost:8080/api/v1/lander \
+  -H "Content-Type: application/json" \
+  -d '{
+    "campaign_id": "your-campaign-id",
+    "landing_page_id": "your-landing-page-id",
+    "subdomain": "test"
+  }'
+```
+
+#### 🚀 Path-Based Deployment (NEW!)
+Deploy to specific paths with automatic folder duplication and campaign parameter injection:
+
+```bash
+# Deploy to specific path
+curl -X POST http://localhost:8080/api/v1/lander \
+  -H "Content-Type: application/json" \
+  -d '{
+    "campaign_id": "campaign-123",
+    "landing_page_id": "landing-456",
+    "subdomain": "fb.puritysalt.com/1/"
+  }'
+
+# Auto-increment path (finds next available /1, /2, /3, etc.)
+curl -X POST http://localhost:8080/api/v1/lander \
+  -H "Content-Type: application/json" \
+  -d '{
+    "campaign_id": "campaign-456",
+    "landing_page_id": "landing-789", 
+    "subdomain": "fb.puritysalt.com/"
+  }'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "🛰️ Satellite deployed successfully! Your beautiful lander is live and tracking.",
+  "subdomain": "test.puritysalt.com",
+  "url": "https://test.puritysalt.com",
+  "request_id": "uuid-here",
+  "duration": "2.1s",
+  "timestamp": "2025-08-06T02:30:45Z"
+}
+```
+
+### GET /api/v1/landers
+List all deployed campaigns:
+
+```bash
+curl http://localhost:8080/api/v1/landers
+```
+
+### GET /health
+System health check:
+
+```bash
+curl http://localhost:8080/health
+```
+
+### GET /metrics
+System performance metrics:
+
+```bash
+curl http://localhost:8080/metrics
+```
+
+## 🛠️ Configuration
+
+Configure via environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `8080` | Server port |
+| `HOST` | `0.0.0.0` | Server host |
+| `BASE_DOMAIN` | `puritysalt.com` | Base domain for subdomains |
+| `LOG_LEVEL` | `info` | Logging level (debug, info, warn, error) |
+| `WORKER_POOL_SIZE` | `4` | Number of deployment workers |
+| `DEPLOYMENT_QUEUE_SIZE` | `100` | Max queued deployments |
+
+## 🏗️ Architecture
+
+### Turn-Key Design
+- **Zero configuration needed** - works out of the box
+- **Environment-based config** - easy to customize
+- **Automatic dependency handling** - installs everything needed
+- **Production-ready defaults** - optimized for performance
+
+### Security Features
+- **Request size limiting** - prevents DoS attacks
+- **Comprehensive security headers** - protects against common attacks
+- **Input validation** - sanitizes all user input
+- **Structured logging** - full audit trail
+- **Graceful error handling** - prevents crashes
+
+### Performance Features  
+- **Concurrent processing** - handles multiple deployments simultaneously
+- **Worker pool architecture** - optimal resource utilization
+- **Buffered deployment queue** - handles traffic spikes
+- **Graceful shutdown** - proper cleanup on stop
+
+## 📦 Production Deployment
+
+### Systemd Service
+The installer automatically sets up a systemd service:
+
+```bash
+# Service management
+sudo systemctl start servertrack-satellites
+sudo systemctl stop servertrack-satellites
+sudo systemctl restart servertrack-satellites
+sudo systemctl status servertrack-satellites
+
+# View logs
+sudo journalctl -u servertrack-satellites -f
+```
+
+### Manual Installation
+```bash
+# Clone repository
+git clone https://github.com/rojolang/servertrack-satellites.git
+cd servertrack-satellites
+
+# Run installer
+chmod +x install.sh
+./install.sh
+
+# Or build manually
+go build -o servertrack-satellites .
+./servertrack-satellites
+```
+
+## 🔍 Monitoring
+
+### Structured Logging
+All requests are logged with full context:
+```json
+{
+  "@timestamp": "2025-08-06T02:30:45.123Z",
+  "level": "info", 
+  "message": "🔄 Satellite request received",
+  "request_id": "uuid-here",
+  "method": "POST",
+  "path": "/api/v1/lander",
+  "remote_addr": "192.168.1.100"
+}
+```
+
+### Health Monitoring
+Monitor service health at `/health` endpoint with comprehensive system status.
+
+### Performance Metrics
+Track system performance at `/metrics` endpoint with:
+- Total requests processed
+- Active deployments
+- System uptime
+- Success rates
+
+## 🚀 Examples
+
+### Basic Deployment
+```bash
+# Deploy a campaign
+curl -X POST http://localhost:8080/api/v1/lander \
+  -H "Content-Type: application/json" \
+  -d '{
+    "campaign_id": "camp-123",
+    "landing_page_id": "lp-456", 
+    "subdomain": "demo"
+  }'
+
+# Result: https://demo.puritysalt.com deployed with tracking
+```
+
+### List All Deployments
+```bash
+curl http://localhost:8080/api/v1/landers | jq
+```
+
+### Check System Health
+```bash
+curl http://localhost:8080/health | jq
+```
+
+## 🎯 Features
+
+### ✅ Turn-Key Operation
+- **One-line installation** on Ubuntu servers
+- **Automatic dependency management** 
+- **Zero configuration required**
+- **Production-ready defaults**
+
+### 🚀 Path-Based Deployments (NEW!)
+- **Automatic folder duplication** with /1, /2, /3 incremental paths
+- **Campaign parameter injection** into HTML for tracking
+- **nginx path routing** automatically configured
+- **Smart path detection** - finds next available number automatically
+
+### ✅ Security Hardened
+- **Request validation and sanitization**
+- **Security headers (XSS, CSRF, etc.)**
+- **Request size limiting**  
+- **Structured audit logging**
+
+### ✅ High Performance
+- **Concurrent deployment processing**
+- **Optimized worker pool** 
+- **Efficient resource usage**
+- **Graceful shutdown handling**
+
+### ✅ Facebook Ad Compliant
+- **Stealth parameter injection**
+- **Clean URL structure**
+- **No visible redirects**
+- **UTM parameter preservation**
 
 ## 📋 Requirements
 
-- **OS:** Ubuntu 22.04 or 24.04 LTS
-- **Access:** Root/sudo privileges
-- **Ports:** 80, 443, 8080 available
-- **Network:** Internet connection for dependencies
+- **Ubuntu 24.04 LTS** (recommended)
+- **Go 1.21+** (auto-installed)
+- **nginx** (auto-configured)
+- **SSL certificates** (auto-generated with Certbot)
 
-## 🧪 Live Demo Server
+## 🤝 Support
 
-**Test the system live:**
-
-- **Server:** http://192.241.148.17:8080
-- **Health:** http://192.241.148.17:8080/health  
-- **Metrics:** http://192.241.148.17:8080/metrics
-
-## 🎯 API Usage
-
-**Deploy a campaign (basic):**
-```bash
-curl -X POST http://YOUR-SERVER-IP:8080/api/v1/lander \
-  -H "Content-Type: application/json" \
-  -d '{
-    "campaign_id": "your-voluum-campaign-id",
-    "landing_page_id": "your-voluum-lander-id", 
-    "subdomain": "your-domain.com"
-  }'
-```
-
-**Deploy with custom tracking domain:**
-```bash
-curl -X POST http://YOUR-SERVER-IP:8080/api/v1/lander \
-  -H "Content-Type: application/json" \
-  -d '{
-    "campaign_id": "your-voluum-campaign-id",
-    "landing_page_id": "your-voluum-lander-id", 
-    "subdomain": "fb.puritysalt.com/1/",
-    "tracking_domain": "custom.track.domain.com"
-  }'
-```
-
-**Path-based deployment:**
-```bash
-# Creates fb.puritysalt.com/1/, fb.puritysalt.com/2/, etc.
-curl -X POST http://YOUR-SERVER-IP:8080/api/v1/lander \
-  -H "Content-Type: application/json" \
-  -d '{
-    "campaign_id": "test-campaign",
-    "landing_page_id": "test-lander",
-    "subdomain": "fb.puritysalt.com/1/"
-  }'
-```
-
-**Check system health:**
-```bash
-curl http://YOUR-SERVER-IP:8080/health
-```
-
-**View active deployments:**
-```bash
-curl http://YOUR-SERVER-IP:8080/api/v1/landers
-```
-
-## ✅ Features
-
-- **Turn-key installation** - Zero manual configuration
-- **API-driven deployment** - RESTful endpoints
-- **Path-based deployments** - `/1/`, `/2/`, `/3/` auto-increment
-- **Custom tracking domains** - Override default tracking URLs
-- **Worker pool architecture** - Concurrent processing  
-- **Structured JSON logging** - Request tracking
-- **Automatic SSL** - Certbot integration
-- **Voluum tracking** - Stealth parameter injection
-- **Production ready** - systemd service with auto-restart
-
-## 📊 Technical Details
-
-- **Binary size:** 5.3MB (statically linked Go)
-- **Memory usage:** ~11MB RAM
-- **Installation time:** ~45 seconds
-- **Deployment time:** ~6 seconds per campaign
-- **Concurrent capacity:** 4 simultaneous deployments
-- **Template source:** Fresh GitHub repo (auto-pulled)
-- **Nginx config:** Clean routing without parameter injection
+- **GitHub Issues**: Report bugs and request features
+- **Documentation**: Complete API documentation included
+- **Monitoring**: Built-in health checks and metrics
+- **Logging**: Comprehensive structured logging
 
 ---
 
-**🛰️ Ready for production deployment!**
+**🛰️ Built for production by the ServerTrack Team**
 
-*This is the public binary distribution. Source code is maintained in a private repository.*
+*Turn-key solution - just run the installer and start deploying beautiful campaigns!*

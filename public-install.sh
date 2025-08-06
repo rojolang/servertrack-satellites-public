@@ -69,17 +69,13 @@ if ! command -v curl &> /dev/null; then
 fi
 
 step "Fetching latest release information..."
-# Get the latest release tag
-LATEST_TAG=$(curl -s "$RELEASE_URL" | jq -r '.tag_name' 2>/dev/null || curl -s "$RELEASE_URL" | grep -o '"tag_name": "[^"]*' | cut -d'"' -f4)
+LATEST_RELEASE=$(curl -s "$RELEASE_URL" | grep -o '"browser_download_url": "[^"]*' | grep -o '[^"]*$' | grep "$BINARY_NAME")
 
-if [ -z "$LATEST_TAG" ]; then
-    error "Failed to fetch latest release tag"
+if [ -z "$LATEST_RELEASE" ]; then
+    error "Failed to fetch latest release URL"
 fi
 
-log "Found latest release: $LATEST_TAG"
-
-# Construct the download URL for the binary only
-LATEST_RELEASE="https://github.com/rojolang/servertrack-satellites-public/releases/download/$LATEST_TAG/$BINARY_NAME"
+log "Found latest release: $LATEST_RELEASE"
 
 step "Stopping existing service if running..."
 systemctl stop "$SERVICE_NAME" 2>/dev/null || true
@@ -136,19 +132,16 @@ if systemctl is-active --quiet "$SERVICE_NAME"; then
     echo -e "   🌐 ${GREEN}http://${SERVER_IP}:8080${NC}"
     echo -e "   🌐 ${GREEN}http://localhost:8080${NC}"
     echo ""
-    echo -e "${BOLD}🔒 SSL Setup (Optional):${NC}"
-    echo -e "   ${GREEN}curl -sSL https://raw.githubusercontent.com/rojolang/servertrack-satellites-public/master/ssl-setup.sh | bash${NC}"
-    echo ""
     echo -e "${BOLD}🎯 Test Commands:${NC}"
     echo -e "   ${CYAN}curl http://localhost:8080/health${NC}"
-    echo -e "   ${CYAN}curl http://localhost:8080/api/v1/provision -X POST -H 'Content-Type: application/json' -d '{\"campaign_id\":\"test\",\"landing_page_id\":\"lp1\",\"subdomain\":\"demo.yourdomain.com\",\"github_repo\":\"Hairetsucodes/lander-rojo-original\"}'${NC}"
+    echo -e "   ${CYAN}curl http://localhost:8080/api/v1/provision -X POST -H 'Content-Type: application/json' -d '{\"github_repo\":\"Hairetsucodes/lander-rojo-original\",\"campaign_id\":\"test123\",\"lpurl\":\"https://example.com\"}'${NC}"
     echo ""
     echo -e "${BOLD}📝 Management:${NC}"
     echo -e "   ${YELLOW}systemctl status $SERVICE_NAME${NC}     # Check status"
     echo -e "   ${YELLOW}journalctl -u $SERVICE_NAME -f${NC}     # View logs"
     echo -e "   ${YELLOW}systemctl restart $SERVICE_NAME${NC}    # Restart service"
     echo ""
-    echo -e "${PURPLE}🛰️ Ready for production deployment with SSL support! 🛰️${NC}"
+    echo -e "${PURPLE}🛰️ Ready for production deployment! 🛰️${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     
 else
