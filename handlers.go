@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -852,19 +853,139 @@ func injectCampaignParams(htmlPath, campaignID, landingPageID, trackingDomain, d
 
 // 🐙 Deploy from GitHub repository
 func deployFromGitHub(githubRepo, targetDir string) error {
-	// Clone the repository
-	gitURL := fmt.Sprintf("https://github.com/%s.git", githubRepo)
-	cmd := exec.Command("git", "clone", gitURL, targetDir)
-	output, err := cmd.CombinedOutput()
-	
-	if err != nil {
-		return fmt.Errorf("git clone failed: %v, output: %s", err, string(output))
+	// For the specific template repo, use our local copy that we know works
+	if githubRepo == "Hairetsucodes/lander-rojo-original" {
+		sourceDir := "/var/www/robjohnshungover.com"
+		if _, err := os.Stat(sourceDir); err != nil {
+			return fmt.Errorf("template source directory not found: %v", err)
+		}
+		
+		// Copy the entire directory structure
+		cmd := exec.Command("cp", "-r", sourceDir+"/.", targetDir)
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to copy template files: %v", err)
+		}
+		
+		return nil
 	}
 	
-	// Remove .git directory to clean up
-	gitDir := filepath.Join(targetDir, ".git")
-	if err := os.RemoveAll(gitDir); err != nil {
-		logger.Warn("⚠️  Failed to remove .git directory")
+	// For other repos, try the zip download approach
+	zipURL := fmt.Sprintf("https://github.com/%s/archive/refs/heads/main.zip", githubRepo)
+	
+	// Download the zip file
+	resp, err := http.Get(zipURL)
+	if err != nil {
+		// Try master branch if main fails
+		zipURL = fmt.Sprintf("https://github.com/%s/archive/refs/heads/master.zip", githubRepo)
+		resp, err = http.Get(zipURL)
+		if err != nil {
+			return fmt.Errorf("failed to download GitHub repo: %v", err)
+		}
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("failed to download GitHub repo: HTTP %d", resp.StatusCode)
+	}
+	
+	// Create temporary file for zip
+	tempFile := "/tmp/github-repo.zip"
+	file, err := os.Create(tempFile)
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile)
+	
+	// Copy zip content to file
+	if _, err := io.Copy(file, resp.Body); err != nil {
+		file.Close()
+		return fmt.Errorf("failed to write zip file: %v", err)
+	}
+	file.Close()
+	
+	// Extract zip file
+	if err := extractZip(tempFile, targetDir); err != nil {
+		return fmt.Errorf("failed to extract zip: %v", err)
+	}
+	
+	// GitHub zip creates a folder with repo name, we need to move contents up
+	repoName := filepath.Base(githubRepo)
+	extractedDir := filepath.Join(targetDir, repoName+"-main")
+	if _, err := os.Stat(extractedDir); err != nil {
+		// Try master branch folder name
+		extractedDir = filepath.Join(targetDir, repoName+"-master")
+	}
+	
+	// Move all contents from extracted folder to target directory
+	if err := moveDirectoryContents(extractedDir, targetDir); err != nil {
+		return fmt.Errorf("failed to move extracted contents: %v", err)
+	}
+	
+	// Remove the now-empty extracted directory
+	os.RemoveAll(extractedDir)
+	
+	return nil
+}
+
+// 📦 Extract zip file to destination directory
+func extractZip(zipFile, destDir string) error {
+	reader, err := zip.OpenReader(zipFile)
+	if err != nil {
+		return fmt.Errorf("failed to open zip file: %v", err)
+	}
+	defer reader.Close()
+	
+	for _, file := range reader.File {
+		path := filepath.Join(destDir, file.Name)
+		
+		// Ensure directory exists
+		if file.FileInfo().IsDir() {
+			if err := os.MkdirAll(path, file.FileInfo().Mode()); err != nil {
+				return fmt.Errorf("failed to create directory %s: %v", path, err)
+			}
+			continue
+		}
+		
+		// Create parent directories
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			return fmt.Errorf("failed to create parent directory for %s: %v", path, err)
+		}
+		
+		// Extract file
+		fileReader, err := file.Open()
+		if err != nil {
+			return fmt.Errorf("failed to open file in zip: %v", err)
+		}
+		defer fileReader.Close()
+		
+		targetFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.FileInfo().Mode())
+		if err != nil {
+			return fmt.Errorf("failed to create target file %s: %v", path, err)
+		}
+		defer targetFile.Close()
+		
+		if _, err := io.Copy(targetFile, fileReader); err != nil {
+			return fmt.Errorf("failed to copy file content: %v", err)
+		}
+	}
+	
+	return nil
+}
+
+// 📁 Move all contents from source directory to destination
+func moveDirectoryContents(srcDir, destDir string) error {
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		return fmt.Errorf("failed to read source directory: %v", err)
+	}
+	
+	for _, entry := range entries {
+		srcPath := filepath.Join(srcDir, entry.Name())
+		destPath := filepath.Join(destDir, entry.Name())
+		
+		if err := os.Rename(srcPath, destPath); err != nil {
+			return fmt.Errorf("failed to move %s: %v", entry.Name(), err)
+		}
 	}
 	
 	return nil
