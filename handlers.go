@@ -295,10 +295,10 @@ func validateLanderRequest(req CreateLanderRequest) error {
 }
 
 func isValidSubdomain(subdomain string) bool {
-	// Basic subdomain validation - letters, numbers, and hyphens
+	// Enhanced subdomain validation - letters, numbers, hyphens, dots, and forward slashes
 	for _, char := range subdomain {
 		if !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || 
-			 (char >= '0' && char <= '9') || char == '-' || char == '.') {
+			 (char >= '0' && char <= '9') || char == '-' || char == '.' || char == '/') {
 			return false
 		}
 	}
@@ -360,15 +360,20 @@ func deploymentWorker(workerID int) {
 	}).Info("👷 Deployment worker shutting down")
 }
 
-// 🛠️ Process deployment using our proven quick-deploy script
+// 🛠️ Process deployment with path-based folder duplication
 func processDeploy(req CreateLanderRequest) error {
-	scriptPath := "/root/templates/quick-deploy.sh"
-	
 	fullDomain := req.Subdomain
 	if !strings.Contains(req.Subdomain, ".") {
 		fullDomain = req.Subdomain + ".puritysalt.com"
 	}
 
+	// Handle path-based deployments (e.g., "fb.puritysalt.com/1/")
+	if strings.Contains(fullDomain, "/") {
+		return processPathBasedDeploy(req, fullDomain)
+	}
+
+	// Regular deployment for domain-only requests
+	scriptPath := "/root/templates/quick-deploy.sh"
 	cmd := exec.Command("bash", scriptPath, fullDomain, req.CampaignID, req.LandingPageID)
 	output, err := cmd.CombinedOutput()
 	
@@ -381,4 +386,117 @@ func processDeploy(req CreateLanderRequest) error {
 	}
 
 	return nil
+}
+
+// 📁 Process path-based deployment with folder duplication
+func processPathBasedDeploy(req CreateLanderRequest, fullDomain string) error {
+	// Extract domain and path
+	parts := strings.SplitN(fullDomain, "/", 2)
+	if len(parts) < 2 {
+		return fmt.Errorf("invalid path format")
+	}
+	
+	domain := parts[0]
+	requestedPath := parts[1]
+	
+	// Remove trailing slash if present
+	requestedPath = strings.TrimSuffix(requestedPath, "/")
+	
+	// If no specific path requested, find next available number
+	if requestedPath == "" {
+		requestedPath = findNextAvailablePath(domain)
+	}
+	
+	// Create the base domain deployment if it doesn't exist
+	baseDir := "/var/www/" + domain
+	nginxConfigExists := false
+	if _, err := os.Stat("/etc/nginx/sites-available/" + domain); err == nil {
+		nginxConfigExists = true
+	}
+	
+	if _, err := os.Stat(baseDir); os.IsNotExist(err) || !nginxConfigExists {
+		// Deploy base domain first using the deployment script
+		scriptPath := "/root/templates/quick-deploy.sh"
+		cmd := exec.Command("bash", scriptPath, domain, req.CampaignID, req.LandingPageID)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			logger.WithFields(logrus.Fields{
+				"request_id": req.RequestID,
+				"output":     string(output),
+			}).Error("💥 Failed to create base domain")
+			return fmt.Errorf("failed to create base domain: %v", err)
+		}
+	}
+	
+	// Create the path-specific directory
+	pathDir := baseDir + "/" + requestedPath
+	if err := os.MkdirAll(pathDir, 0755); err != nil {
+		return fmt.Errorf("failed to create path directory: %v", err)
+	}
+	
+	// Copy template files to the path directory
+	templateDir := "/var/www/template"
+	cmd := exec.Command("cp", "-r", templateDir+"/.", pathDir+"/")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		logger.WithFields(logrus.Fields{
+			"request_id": req.RequestID,
+			"output":     string(output),
+		}).Error("💥 Failed to copy template to path directory")
+		return fmt.Errorf("failed to copy template: %v", err)
+	}
+	
+	// Set proper ownership
+	cmd = exec.Command("chown", "-R", "www-data:www-data", pathDir)
+	if _, err := cmd.CombinedOutput(); err != nil {
+		logger.WithFields(logrus.Fields{
+			"request_id": req.RequestID,
+		}).Warn("⚠️  Failed to set ownership")
+	}
+	
+	// Update the HTML file with campaign parameters
+	return injectCampaignParams(pathDir+"/index.html", req.CampaignID, req.LandingPageID)
+}
+
+// 🔢 Find the next available path number
+func findNextAvailablePath(domain string) string {
+	baseDir := "/var/www/" + domain
+	for i := 1; i <= 1000; i++ {
+		pathDir := fmt.Sprintf("%s/%d", baseDir, i)
+		if _, err := os.Stat(pathDir); os.IsNotExist(err) {
+			return fmt.Sprintf("%d", i)
+		}
+	}
+	return "1" // fallback
+}
+
+// 💉 Inject campaign parameters into HTML file
+func injectCampaignParams(htmlPath, campaignID, landingPageID string) error {
+	content, err := os.ReadFile(htmlPath)
+	if err != nil {
+		return fmt.Errorf("failed to read HTML file: %v", err)
+	}
+	
+	htmlContent := string(content)
+	
+	// Inject campaign parameters into the HTML
+	// Add script before closing </head> tag
+	scriptInjection := fmt.Sprintf(`<script>
+		// Campaign configuration injected by ServerTrack
+		window.CAMPAIGN_ID = '%s';
+		window.LANDING_PAGE_ID = '%s';
+		
+		// Auto-append parameters if not present
+		if (!window.location.search.includes('cpid')) {
+			const currentParams = new URLSearchParams(window.location.search);
+			currentParams.set('cpid', '%s');
+			currentParams.set('lpid', '%s');
+			history.replaceState(null, '', '?' + currentParams.toString());
+		}
+	</script>
+	</head>`, campaignID, landingPageID, campaignID, landingPageID)
+	
+	// Replace </head> with our script injection
+	htmlContent = strings.Replace(htmlContent, "</head>", scriptInjection, 1)
+	
+	// Write updated content back
+	return os.WriteFile(htmlPath, []byte(htmlContent), 0644)
 }

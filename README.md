@@ -26,6 +26,7 @@ ServerTrack Satellites is a **production-ready API service** that:
 ### POST /api/v1/lander
 Deploy a new landing page campaign:
 
+#### Basic Domain Deployment
 ```bash
 curl -X POST http://localhost:8080/api/v1/lander \
   -H "Content-Type: application/json" \
@@ -33,6 +34,29 @@ curl -X POST http://localhost:8080/api/v1/lander \
     "campaign_id": "your-campaign-id",
     "landing_page_id": "your-landing-page-id",
     "subdomain": "test"
+  }'
+```
+
+#### 🚀 Path-Based Deployment (NEW!)
+Deploy to specific paths with automatic folder duplication and campaign parameter injection:
+
+```bash
+# Deploy to specific path
+curl -X POST http://localhost:8080/api/v1/lander \
+  -H "Content-Type: application/json" \
+  -d '{
+    "campaign_id": "campaign-123",
+    "landing_page_id": "landing-456",
+    "subdomain": "fb.puritysalt.com/1/"
+  }'
+
+# Auto-increment path (finds next available /1, /2, /3, etc.)
+curl -X POST http://localhost:8080/api/v1/lander \
+  -H "Content-Type: application/json" \
+  -d '{
+    "campaign_id": "campaign-456",
+    "landing_page_id": "landing-789", 
+    "subdomain": "fb.puritysalt.com/"
   }'
 ```
 
@@ -194,6 +218,12 @@ curl http://localhost:8080/health | jq
 - **Automatic dependency management** 
 - **Zero configuration required**
 - **Production-ready defaults**
+
+### 🚀 Path-Based Deployments (NEW!)
+- **Automatic folder duplication** with /1, /2, /3 incremental paths
+- **Campaign parameter injection** into HTML for tracking
+- **nginx path routing** automatically configured
+- **Smart path detection** - finds next available number automatically
 
 ### ✅ Security Hardened
 - **Request validation and sanitization**
