@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync/atomic"
@@ -47,13 +48,18 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 				"returns":     "Request counts, latency, and deployment statistics",
 			},
 			"POST /api/v1/lander": map[string]string{
-				"description": "Deploy a new satellite landing page campaign",
-				"parameters":  "campaign_id, landing_page_id, subdomain",
+				"description": "Deploy a new satellite landing page campaign (uses template by default, or custom source if provided)",
+				"parameters":  "campaign_id, landing_page_id, subdomain, tracking_domain, [optional: github_repo OR zip_file]",
 				"returns":     "Deployment status, URL, and tracking information",
 			},
 			"GET  /api/v1/landers": map[string]string{
 				"description": "List all active satellite deployments",
 				"returns":     "Array of active landers with status and metrics",
+			},
+			"POST /api/v1/provision": map[string]string{
+				"description": "Provision a new landing page with custom domain and tracking configuration (on-demand deployment)",
+				"parameters":  "campaign_id, landing_page_id, subdomain, tracking_domain, github_repo OR zip_file",
+				"returns":     "Deployment status and tracking information",
 			},
 			"GET  /api/v1/status/{id}": map[string]string{
 				"description": "Check deployment status by request ID",
@@ -150,11 +156,25 @@ func createLanderHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.WithFields(logrus.Fields{
-		"request_id":     requestID,
-		"campaign_id":    req.CampaignID,
+		"request_id":      requestID,
+		"campaign_id":     req.CampaignID,
 		"landing_page_id": req.LandingPageID,
-		"subdomain":      req.Subdomain,
+		"subdomain":       req.Subdomain,
+		"tracking_domain": req.TrackingDomain,
+		"github_repo":     req.GitHubRepo,
+		"zip_file":        req.ZipFileURL,
 	}).Info("📊 Deploying satellite with configuration")
+
+	// 🚀 Start deployment workers on first use
+	workersStarted.Do(func() {
+		for i := 0; i < config.WorkerPoolSize; i++ {
+			workers.Add(1)
+			go deploymentWorker(i)
+		}
+		logger.WithFields(logrus.Fields{
+			"worker_count": config.WorkerPoolSize,
+		}).Info("👷 Started deployment workers on-demand")
+	})
 
 	// 🚀 Queue deployment for concurrent processing
 	select {
@@ -250,6 +270,102 @@ func listLandersHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// 🚀 Provision Handler - On-demand deployment with custom arguments
+func provisionHandler(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	requestID := getRequestID(r)
+	
+	logger.WithFields(logrus.Fields{
+		"request_id": requestID,
+		"endpoint":   "/api/v1/provision",
+	}).Info("🎯 New provision deployment request received")
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		logger.WithFields(logrus.Fields{
+			"request_id": requestID,
+			"error":      err,
+		}).Error("💥 Failed to read request body")
+		sendErrorResponse(w, requestID, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+
+	var req CreateLanderRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		logger.WithFields(logrus.Fields{
+			"request_id": requestID,
+			"error":      err,
+		}).Error("💥 Failed to parse JSON")
+		sendErrorResponse(w, requestID, "Invalid JSON format", http.StatusBadRequest)
+		return
+	}
+
+	// Add request ID for tracking
+	req.RequestID = requestID
+
+	// 🧹 Enhanced input validation for provision requests
+	if err := validateProvisionRequest(req); err != nil {
+		logger.WithFields(logrus.Fields{
+			"request_id": requestID,
+			"error":      err,
+		}).Error("💥 Validation failed")
+		sendErrorResponse(w, requestID, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	logger.WithFields(logrus.Fields{
+		"request_id":      requestID,
+		"campaign_id":     req.CampaignID,
+		"landing_page_id": req.LandingPageID,
+		"subdomain":       req.Subdomain,
+		"tracking_domain": req.TrackingDomain,
+		"github_repo":     req.GitHubRepo,
+		"zip_file":        req.ZipFileURL,
+	}).Info("📊 Processing provision deployment with configuration")
+
+	// 🚀 Process provision deployment directly (synchronously for immediate feedback)
+	err = processProvisionDeploy(req)
+	duration := time.Since(start)
+
+	if err != nil {
+		logger.WithFields(logrus.Fields{
+			"request_id": requestID,
+			"error":      err,
+			"duration":   duration.String(),
+		}).Error("💥 Provision deployment failed")
+		sendErrorResponse(w, requestID, fmt.Sprintf("Deployment failed: %v", err), http.StatusInternalServerError)
+		atomic.AddInt64(&metrics.FailedRequests, 1)
+		return
+	}
+
+	fullDomain := req.Subdomain
+	if !strings.Contains(req.Subdomain, ".") {
+		fullDomain = req.Subdomain + ".puritysalt.com"
+	}
+
+	atomic.AddInt64(&metrics.TotalDeployments, 1)
+
+	response := CreateLanderResponse{
+		Success:   true,
+		Message:   "🛰️ Satellite deployment completed successfully! Your beautiful lander is now live.",
+		Subdomain: fullDomain,
+		URL:       "https://" + fullDomain,
+		RequestID: requestID,
+		Duration:  duration.String(),
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	}
+
+	logger.WithFields(logrus.Fields{
+		"request_id": requestID,
+		"domain":     fullDomain,
+		"duration":   duration.String(),
+	}).Info("✅ Provision deployment completed successfully")
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Response-Time", duration.String())
+	json.NewEncoder(w).Encode(response)
+}
+
 // 🔍 Deployment Status Handler for request tracking
 func getDeploymentStatus(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
@@ -275,7 +391,7 @@ func getDeploymentStatus(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// 🧹 Enhanced validation function
+// 🧹 Enhanced validation function for lander requests
 func validateLanderRequest(req CreateLanderRequest) error {
 	if strings.TrimSpace(req.CampaignID) == "" {
 		return fmt.Errorf("campaign_id is required and cannot be empty")
@@ -292,6 +408,66 @@ func validateLanderRequest(req CreateLanderRequest) error {
 	if !isValidSubdomain(req.Subdomain) {
 		return fmt.Errorf("invalid subdomain format")
 	}
+	
+	// Validate deployment sources if provided (optional for lander endpoint)
+	githubProvided := strings.TrimSpace(req.GitHubRepo) != ""
+	zipProvided := strings.TrimSpace(req.ZipFileURL) != ""
+	
+	// If both are provided, that's an error
+	if githubProvided && zipProvided {
+		return fmt.Errorf("only one of github_repo or zip_file can be provided, not both")
+	}
+	
+	// Validate GitHub repo format if provided
+	if githubProvided {
+		if !isValidGitHubRepo(req.GitHubRepo) {
+			return fmt.Errorf("invalid github_repo format (expected: owner/repo)")
+		}
+	}
+	
+	// Validate zip file URL format if provided
+	if zipProvided {
+		if !isValidURL(req.ZipFileURL) {
+			return fmt.Errorf("invalid zip_file URL format")
+		}
+	}
+	
+	return nil
+}
+
+// 🧹 Enhanced validation function for provision requests
+func validateProvisionRequest(req CreateLanderRequest) error {
+	// First validate the basic fields
+	if err := validateLanderRequest(req); err != nil {
+		return err
+	}
+	
+	// Validate that either github_repo or zip_file is provided, but not both
+	githubProvided := strings.TrimSpace(req.GitHubRepo) != ""
+	zipProvided := strings.TrimSpace(req.ZipFileURL) != ""
+	
+	if !githubProvided && !zipProvided {
+		return fmt.Errorf("either github_repo or zip_file must be provided")
+	}
+	
+	if githubProvided && zipProvided {
+		return fmt.Errorf("only one of github_repo or zip_file can be provided, not both")
+	}
+	
+	// Validate GitHub repo format if provided
+	if githubProvided {
+		if !isValidGitHubRepo(req.GitHubRepo) {
+			return fmt.Errorf("invalid github_repo format (expected: owner/repo)")
+		}
+	}
+	
+	// Validate zip file URL format if provided
+	if zipProvided {
+		if !isValidURL(req.ZipFileURL) {
+			return fmt.Errorf("invalid zip_file URL format")
+		}
+	}
+	
 	return nil
 }
 
@@ -304,6 +480,33 @@ func isValidSubdomain(subdomain string) bool {
 		}
 	}
 	return true
+}
+
+func isValidGitHubRepo(repo string) bool {
+	// Basic GitHub repo validation: owner/repo format
+	parts := strings.Split(repo, "/")
+	if len(parts) != 2 {
+		return false
+	}
+	
+	owner, repoName := parts[0], parts[1]
+	if strings.TrimSpace(owner) == "" || strings.TrimSpace(repoName) == "" {
+		return false
+	}
+	
+	// Basic validation for valid characters (GitHub allows alphanumeric, hyphens, underscores, dots)
+	validChars := regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+	return validChars.MatchString(owner) && validChars.MatchString(repoName)
+}
+
+func isValidURL(url string) bool {
+	// Basic URL validation
+	if strings.TrimSpace(url) == "" {
+		return false
+	}
+	
+	// Check if it starts with http:// or https://
+	return strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://")
 }
 
 // 💥 Enhanced error response function
@@ -361,11 +564,81 @@ func deploymentWorker(workerID int) {
 	}).Info("👷 Deployment worker shutting down")
 }
 
-// 🛠️ Process deployment with path-based folder duplication
+// 🛠️ Process provision deployment with GitHub repo or zip file support
+func processProvisionDeploy(req CreateLanderRequest) error {
+	fullDomain := req.Subdomain
+	if !strings.Contains(req.Subdomain, ".") {
+		fullDomain = req.Subdomain + ".puritysalt.com"
+	}
+
+	// Create deployment directory
+	siteDir := "/var/www/" + fullDomain
+	
+	// Remove existing directory if it exists
+	if _, err := os.Stat(siteDir); err == nil {
+		if err := os.RemoveAll(siteDir); err != nil {
+			return fmt.Errorf("failed to remove existing directory: %v", err)
+		}
+	}
+	
+	// Create the directory
+	if err := os.MkdirAll(siteDir, 0755); err != nil {
+		return fmt.Errorf("failed to create site directory: %v", err)
+	}
+
+	// Deploy from source (GitHub repo or zip file)
+	if strings.TrimSpace(req.GitHubRepo) != "" {
+		if err := deployFromGitHub(req.GitHubRepo, siteDir); err != nil {
+			return fmt.Errorf("failed to deploy from GitHub repo: %v", err)
+		}
+	} else if strings.TrimSpace(req.ZipFileURL) != "" {
+		if err := deployFromZip(req.ZipFileURL, siteDir); err != nil {
+			return fmt.Errorf("failed to deploy from zip file: %v", err)
+		}
+	} else {
+		return fmt.Errorf("no deployment source provided")
+	}
+
+	// Set proper ownership
+	cmd := exec.Command("chown", "-R", "www-data:www-data", siteDir)
+	if _, err := cmd.CombinedOutput(); err != nil {
+		logger.WithFields(logrus.Fields{
+			"request_id": req.RequestID,
+		}).Warn("⚠️  Failed to set ownership")
+	}
+
+	// Create nginx configuration
+	if err := createNginxConfig(fullDomain); err != nil {
+		return fmt.Errorf("failed to create nginx config: %v", err)
+	}
+
+	// Reload nginx
+	cmd = exec.Command("nginx", "-s", "reload")
+	if _, err := cmd.CombinedOutput(); err != nil {
+		logger.WithFields(logrus.Fields{
+			"request_id": req.RequestID,
+		}).Warn("⚠️  Failed to reload nginx")
+	}
+
+	// Apply campaign parameters to HTML files
+	deploymentURL := fmt.Sprintf("https://%s", fullDomain)
+	return injectCampaignParamsToDirectory(siteDir, req.CampaignID, req.LandingPageID, req.TrackingDomain, deploymentURL)
+}
+
+// 🛠️ Process deployment with path-based folder duplication and optional custom sources
 func processDeploy(req CreateLanderRequest) error {
 	fullDomain := req.Subdomain
 	if !strings.Contains(req.Subdomain, ".") {
 		fullDomain = req.Subdomain + ".puritysalt.com"
+	}
+
+	// Check if custom deployment source is provided (GitHub repo or zip file)
+	githubProvided := strings.TrimSpace(req.GitHubRepo) != ""
+	zipProvided := strings.TrimSpace(req.ZipFileURL) != ""
+	
+	if githubProvided || zipProvided {
+		// Use custom source deployment (similar to provision endpoint)
+		return processCustomSourceDeploy(req, fullDomain)
 	}
 
 	// Handle path-based deployments (e.g., "fb.puritysalt.com/1/")
@@ -373,7 +646,7 @@ func processDeploy(req CreateLanderRequest) error {
 		return processPathBasedDeploy(req, fullDomain)
 	}
 
-	// Regular deployment for domain-only requests
+	// Regular deployment for domain-only requests using template
 	scriptPath := "/root/templates/quick-deploy.sh"
 	trackingDomain := req.TrackingDomain
 	if trackingDomain == "" {
@@ -394,6 +667,62 @@ func processDeploy(req CreateLanderRequest) error {
 	siteDir := "/var/www/" + fullDomain
 	deploymentURL := fmt.Sprintf("https://%s", fullDomain)
 	return injectCampaignParams(siteDir+"/index.html", req.CampaignID, req.LandingPageID, req.TrackingDomain, deploymentURL)
+}
+
+// 🚀 Process deployment from custom sources (GitHub repo or zip file)
+func processCustomSourceDeploy(req CreateLanderRequest, fullDomain string) error {
+	// Create deployment directory
+	siteDir := "/var/www/" + fullDomain
+	
+	// Remove existing directory if it exists
+	if _, err := os.Stat(siteDir); err == nil {
+		if err := os.RemoveAll(siteDir); err != nil {
+			return fmt.Errorf("failed to remove existing directory: %v", err)
+		}
+	}
+	
+	// Create the directory
+	if err := os.MkdirAll(siteDir, 0755); err != nil {
+		return fmt.Errorf("failed to create site directory: %v", err)
+	}
+
+	// Deploy from source (GitHub repo or zip file)
+	if strings.TrimSpace(req.GitHubRepo) != "" {
+		if err := deployFromGitHub(req.GitHubRepo, siteDir); err != nil {
+			return fmt.Errorf("failed to deploy from GitHub repo: %v", err)
+		}
+	} else if strings.TrimSpace(req.ZipFileURL) != "" {
+		if err := deployFromZip(req.ZipFileURL, siteDir); err != nil {
+			return fmt.Errorf("failed to deploy from zip file: %v", err)
+		}
+	} else {
+		return fmt.Errorf("no deployment source provided")
+	}
+
+	// Set proper ownership
+	cmd := exec.Command("chown", "-R", "www-data:www-data", siteDir)
+	if _, err := cmd.CombinedOutput(); err != nil {
+		logger.WithFields(logrus.Fields{
+			"request_id": req.RequestID,
+		}).Warn("⚠️  Failed to set ownership")
+	}
+
+	// Create nginx configuration
+	if err := createNginxConfig(fullDomain); err != nil {
+		return fmt.Errorf("failed to create nginx config: %v", err)
+	}
+
+	// Reload nginx
+	cmd = exec.Command("nginx", "-s", "reload")
+	if _, err := cmd.CombinedOutput(); err != nil {
+		logger.WithFields(logrus.Fields{
+			"request_id": req.RequestID,
+		}).Warn("⚠️  Failed to reload nginx")
+	}
+
+	// Apply campaign parameters to HTML files
+	deploymentURL := fmt.Sprintf("https://%s", fullDomain)
+	return injectCampaignParamsToDirectory(siteDir, req.CampaignID, req.LandingPageID, req.TrackingDomain, deploymentURL)
 }
 
 // 📁 Process path-based deployment with folder duplication
@@ -519,4 +848,140 @@ func injectCampaignParams(htmlPath, campaignID, landingPageID, trackingDomain, d
 	
 	// Write updated content back
 	return os.WriteFile(htmlPath, []byte(htmlContent), 0644)
+}
+
+// 🐙 Deploy from GitHub repository
+func deployFromGitHub(githubRepo, targetDir string) error {
+	// Clone the repository
+	gitURL := fmt.Sprintf("https://github.com/%s.git", githubRepo)
+	cmd := exec.Command("git", "clone", gitURL, targetDir)
+	output, err := cmd.CombinedOutput()
+	
+	if err != nil {
+		return fmt.Errorf("git clone failed: %v, output: %s", err, string(output))
+	}
+	
+	// Remove .git directory to clean up
+	gitDir := filepath.Join(targetDir, ".git")
+	if err := os.RemoveAll(gitDir); err != nil {
+		logger.Warn("⚠️  Failed to remove .git directory")
+	}
+	
+	return nil
+}
+
+// 📦 Deploy from zip file URL
+func deployFromZip(zipURL, targetDir string) error {
+	// Download the zip file
+	resp, err := http.Get(zipURL)
+	if err != nil {
+		return fmt.Errorf("failed to download zip file: %v", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to download zip file: HTTP %d", resp.StatusCode)
+	}
+	
+	// Create temporary file for zip
+	tmpFile, err := os.CreateTemp("", "deploy-*.zip")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+	
+	// Copy zip content to temp file
+	_, err = io.Copy(tmpFile, resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to save zip file: %v", err)
+	}
+	
+	// Extract zip file
+	cmd := exec.Command("unzip", "-o", tmpFile.Name(), "-d", targetDir)
+	output, err := cmd.CombinedOutput()
+	
+	if err != nil {
+		return fmt.Errorf("unzip failed: %v, output: %s", err, string(output))
+	}
+	
+	return nil
+}
+
+// 🔧 Create nginx configuration for domain
+func createNginxConfig(domain string) error {
+	configContent := fmt.Sprintf(`server {
+    listen 80;
+    listen [::]:80;
+    server_name %s;
+    
+    # Redirect HTTP to HTTPS
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name %s;
+    
+    # SSL Configuration (assuming certificates exist)
+    ssl_certificate /etc/letsencrypt/live/%s/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/%s/privkey.pem;
+    
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    
+    # Document root
+    root /var/www/%s;
+    index index.html index.htm;
+    
+    location / {
+        try_files $uri $uri/ =404;
+    }
+    
+    # Cache static assets
+    location ~* \.(css|js|jpg|jpeg|png|gif|ico|svg)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+}`, domain, domain, domain, domain, domain)
+
+	configPath := fmt.Sprintf("/etc/nginx/sites-available/%s", domain)
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		return fmt.Errorf("failed to write nginx config: %v", err)
+	}
+	
+	// Enable the site
+	enabledPath := fmt.Sprintf("/etc/nginx/sites-enabled/%s", domain)
+	if err := os.Symlink(configPath, enabledPath); err != nil {
+		// Ignore error if symlink already exists
+		if !os.IsExist(err) {
+			return fmt.Errorf("failed to enable nginx site: %v", err)
+		}
+	}
+	
+	return nil
+}
+
+// 📁 Inject campaign parameters into all HTML files in a directory
+func injectCampaignParamsToDirectory(dir, campaignID, landingPageID, trackingDomain, deploymentURL string) error {
+	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		
+		// Only process HTML files
+		if !info.IsDir() && strings.HasSuffix(strings.ToLower(path), ".html") {
+			if err := injectCampaignParams(path, campaignID, landingPageID, trackingDomain, deploymentURL); err != nil {
+				logger.WithFields(logrus.Fields{
+					"file": path,
+					"error": err,
+				}).Warn("⚠️  Failed to inject campaign params into HTML file")
+			}
+		}
+		
+		return nil
+	})
 }

@@ -28,6 +28,9 @@ type CreateLanderRequest struct {
 	Subdomain      string `json:"subdomain" validate:"required,min=1,max=100"`
 	TrackingDomain string `json:"tracking_domain,omitempty"`
 	RequestID      string `json:"request_id,omitempty"`
+	// Deployment source - either GitHub repo or zip file URL (mutually exclusive)
+	GitHubRepo     string `json:"github_repo,omitempty"`
+	ZipFileURL     string `json:"zip_file,omitempty"`
 }
 
 type CreateLanderResponse struct {
@@ -67,6 +70,7 @@ var (
 	// Deployment processing infrastructure
 	deployQueue chan CreateLanderRequest
 	workers     sync.WaitGroup
+	workersStarted sync.Once
 	
 	// Graceful shutdown coordination
 	shutdownComplete chan struct{}
@@ -83,8 +87,8 @@ func init() {
 	// Initialize structured logger with security-conscious configuration
 	initializeLogger()
 	
-	// Initialize deployment processing infrastructure
-	initializeDeploymentSystem()
+	// Initialize deployment processing infrastructure (queue only, no workers)
+	initializeDeploymentQueue()
 	
 	
 	// Initialize graceful shutdown coordination
@@ -93,9 +97,9 @@ func init() {
 	logger.WithFields(logrus.Fields{
 		"service":           "ServerTrack Satellites",
 		"version":           "2.0.0",
-		"worker_pool_size":  config.WorkerPoolSize,
 		"queue_size":        config.DeploymentQueueSize,
 		"base_domain":       config.BaseDomain,
+		"deployment_mode":   "on-demand",
 	}).Info("🛰️ ServerTrack Satellites initialized successfully")
 }
 
@@ -126,21 +130,14 @@ func initializeLogger() {
 	logger.SetOutput(os.Stdout)
 }
 
-// initializeDeploymentSystem sets up the worker pool and deployment queue
-func initializeDeploymentSystem() {
-	// Initialize deployment queue with configured size
+// initializeDeploymentQueue sets up the deployment queue (workers start on-demand)
+func initializeDeploymentQueue() {
+	// Initialize deployment queue with configured size (for the existing /api/v1/lander endpoint)
 	deployQueue = make(chan CreateLanderRequest, config.DeploymentQueueSize)
 	
-	// Start worker pool with configured size
-	for i := 0; i < config.WorkerPoolSize; i++ {
-		workers.Add(1)
-		go deploymentWorker(i)
-	}
-	
 	logger.WithFields(logrus.Fields{
-		"worker_count": config.WorkerPoolSize,
-		"queue_size":   config.DeploymentQueueSize,
-	}).Info("🔧 Deployment system initialized")
+		"queue_size": config.DeploymentQueueSize,
+	}).Info("🔧 Deployment queue initialized - workers will start on-demand")
 }
 
 // main is the entry point for the ServerTrack Satellites application
@@ -207,6 +204,7 @@ func main() {
 			fmt.Sprintf("GET  http://%s:%s/metrics - System metrics", config.Host, config.Port),
 			fmt.Sprintf("POST http://%s:%s/api/v1/lander - Deploy satellite", config.Host, config.Port),
 			fmt.Sprintf("GET  http://%s:%s/api/v1/landers - List deployments", config.Host, config.Port),
+			fmt.Sprintf("POST http://%s:%s/api/v1/provision - Provision new landing page with custom domain and tracking configuration (on-demand deployment)", config.Host, config.Port),
 		},
 	}).Info("🛰️ ServerTrack Satellites ready - All systems operational")
 
@@ -247,6 +245,7 @@ func initializeRouter() http.Handler {
 	
 	// API v1 routes
 	apiV1 := router.PathPrefix("/api/v1").Subrouter()
+	apiV1.HandleFunc("/provision", provisionHandler).Methods("POST").Name("provision")
 	apiV1.HandleFunc("/lander", createLanderHandler).Methods("POST").Name("create-lander")
 	apiV1.HandleFunc("/landers", listLandersHandler).Methods("GET").Name("list-landers")
 	apiV1.HandleFunc("/status/{requestId:[a-zA-Z0-9-]+}", getDeploymentStatus).Methods("GET").Name("deployment-status")
