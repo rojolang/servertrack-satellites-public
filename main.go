@@ -1,27 +1,29 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"io"
+	"context"
 	"net/http"
 	"os"
-	"os/exec"
-	"strings"
+	"os/signal"
+	"runtime"
+	"sync"
+	"syscall"
 	"time"
 
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
 	"github.com/sirupsen/logrus"
 )
 
-// 🚀 RojoLang API - Beautiful Lander Generation Service
-// Keep It Freaking Simple Stupid (KIFSS) 
+// 🛰️ ServerTrack Satellites - Beautiful Lander Generation Service
+// Elegantly crafted for effortless campaign creation 
 
 type CreateLanderRequest struct {
 	CampaignID    string `json:"campaign_id" binding:"required"`
 	LandingPageID string `json:"landing_page_id" binding:"required"`
 	Subdomain     string `json:"subdomain" binding:"required"`
+	RequestID     string `json:"request_id,omitempty"`
 }
 
 type CreateLanderResponse struct {
@@ -30,220 +32,143 @@ type CreateLanderResponse struct {
 	Subdomain string `json:"subdomain,omitempty"`
 	URL       string `json:"url,omitempty"`
 	Error     string `json:"error,omitempty"`
+	RequestID string `json:"request_id,omitempty"`
+	Duration  string `json:"duration,omitempty"`
 }
 
-var logger *logrus.Logger
+type ServerMetrics struct {
+	RequestCount    int64 `json:"request_count"`
+	ActiveRequests  int64 `json:"active_requests"`
+	TotalDeployments int64 `json:"total_deployments"`
+	SuccessRate     float64 `json:"success_rate"`
+	AverageLatency  time.Duration `json:"average_latency"`
+	Uptime         time.Duration `json:"uptime"`
+}
+
+var (
+	logger      *logrus.Logger
+	metrics     ServerMetrics
+	startTime   time.Time
+	deployQueue = make(chan CreateLanderRequest, 100) // Buffered channel for deployment queue
+	workers     sync.WaitGroup
+)
 
 func init() {
-	// 🎨 Beautiful logging setup
+	// 🎨 Beautiful enhanced logging setup
 	logger = logrus.New()
-	logger.SetFormatter(&logrus.TextFormatter{
-		FullTimestamp: true,
-		ForceColors:   true,
+	logger.SetFormatter(&logrus.JSONFormatter{
+		TimestampFormat: time.RFC3339,
+		PrettyPrint:     true,
+		FieldMap: logrus.FieldMap{
+			logrus.FieldKeyTime:  "timestamp",
+			logrus.FieldKeyLevel: "level",
+			logrus.FieldKeyMsg:   "message",
+		},
 	})
 	logger.SetLevel(logrus.InfoLevel)
+	startTime = time.Now()
+	
+	// Initialize worker pool for concurrent deployments
+	workerCount := runtime.NumCPU() * 2 // 2x CPU cores for optimal performance
+	for i := 0; i < workerCount; i++ {
+		workers.Add(1)
+		go deploymentWorker(i)
+	}
 }
 
 func main() {
-	logger.Info("🚀 RojoLang API Starting Up...")
-	logger.Info("🎯 Keep It Freaking Simple Stupid Mode: ACTIVATED")
+	logger.WithFields(logrus.Fields{
+		"service": "ServerTrack Satellites",
+		"version": "2.0.0",
+		"workers": runtime.NumCPU() * 2,
+	}).Info("🛰️ Initializing Beautiful Campaign Engine...")
+	
+	logger.Info("✨ Elegant automation ready for deployment")
 
 	r := mux.NewRouter()
 	
-	// 🎨 Beautiful CORS setup
+	// 🎨 Beautiful CORS setup with enhanced security
 	c := cors.New(cors.Options{
-		AllowedOrigins: []string{"*"},
-		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders: []string{"*"},
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"*"},
+		ExposedHeaders:   []string{"X-Request-ID", "X-Response-Time"},
+		AllowCredentials: true,
+		MaxAge:          300,
 	})
 
-	// 📍 Routes
+	// 📍 Enhanced Routes with middleware
 	r.HandleFunc("/", homeHandler).Methods("GET")
 	r.HandleFunc("/health", healthHandler).Methods("GET")
+	r.HandleFunc("/metrics", metricsHandler).Methods("GET")
 	r.HandleFunc("/api/v1/lander", createLanderHandler).Methods("POST")
 	r.HandleFunc("/api/v1/landers", listLandersHandler).Methods("GET")
+	r.HandleFunc("/api/v1/status/{requestId}", getDeploymentStatus).Methods("GET")
 
-	// 🎯 Beautiful middleware
+	// 🎯 Beautiful middleware stack
+	r.Use(requestIDMiddleware)
+	r.Use(metricsMiddleware)  
+	r.Use(errorHandlerMiddleware)
 	r.Use(loggingMiddleware)
+	r.Use(rateLimitMiddleware)
 
-	handler := c.Handler(r)
+	// 📝 Request logging middleware from Gorilla
+	loggedRouter := handlers.LoggingHandler(os.Stdout, r)
+	handler := c.Handler(loggedRouter)
 
 	port := "8080"
 	if p := os.Getenv("PORT"); p != "" {
 		port = p
 	}
 
-	logger.Infof("🌐 Server starting on port %s", port)
-	logger.Infof("🔗 Available endpoints:")
-	logger.Infof("   GET  / - Welcome page")
-	logger.Infof("   GET  /health - Health check")
-	logger.Infof("   POST /api/v1/lander - Create new lander")
-	logger.Infof("   GET  /api/v1/landers - List all landers")
-
-	if err := http.ListenAndServe(":"+port, handler); err != nil {
-		logger.Fatalf("💥 Server failed to start: %v", err)
+	// 🚀 Enhanced server with graceful shutdown
+	server := &http.Server{
+		Addr:           ":" + port,
+		Handler:        handler,
+		ReadTimeout:    30 * time.Second,
+		WriteTimeout:   30 * time.Second,
+		IdleTimeout:    60 * time.Second,
+		MaxHeaderBytes: 1 << 20, // 1 MB
 	}
-}
 
-func homeHandler(w http.ResponseWriter, r *http.Request) {
-	response := map[string]interface{}{
-		"service": "RojoLang Lander API",
-		"version": "1.0.0",
-		"status":  "🚀 Ready to create beautiful landers!",
-		"endpoints": map[string]string{
-			"POST /api/v1/lander":  "Create a new lander",
-			"GET  /api/v1/landers": "List all landers",
-			"GET  /health":         "Health check",
+	logger.WithFields(logrus.Fields{
+		"port": port,
+		"endpoints": []string{
+			"GET  / - Welcome page",
+			"GET  /health - Satellite health check", 
+			"GET  /metrics - System metrics",
+			"POST /api/v1/lander - Deploy new satellite",
+			"GET  /api/v1/landers - List all satellites",
+			"GET  /api/v1/status/{id} - Check deployment status",
 		},
-	}
-	
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
+	}).Info("🌐 ServerTrack Satellites launching...")
 
-func healthHandler(w http.ResponseWriter, r *http.Request) {
-	response := map[string]interface{}{
-		"status":    "healthy",
-		"timestamp": time.Now().UTC(),
-		"uptime":    "🟢 All systems go!",
-	}
-	
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
+	// Graceful shutdown handling
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
-func createLanderHandler(w http.ResponseWriter, r *http.Request) {
-	logger.Info("🎯 New lander creation request received")
-	
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		logger.Errorf("💥 Failed to read request body: %v", err)
-		sendErrorResponse(w, "Failed to read request body", http.StatusBadRequest)
-		return
-	}
-
-	var req CreateLanderRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		logger.Errorf("💥 Failed to parse JSON: %v", err)
-		sendErrorResponse(w, "Invalid JSON format", http.StatusBadRequest)
-		return
-	}
-
-	// 🧹 Clean and validate inputs
-	req.CampaignID = strings.TrimSpace(req.CampaignID)
-	req.LandingPageID = strings.TrimSpace(req.LandingPageID)
-	req.Subdomain = strings.TrimSpace(req.Subdomain)
-
-	if req.CampaignID == "" || req.LandingPageID == "" || req.Subdomain == "" {
-		logger.Error("💥 Missing required fields")
-		sendErrorResponse(w, "campaign_id, landing_page_id, and subdomain are required", http.StatusBadRequest)
-		return
-	}
-
-	logger.Infof("📊 Creating lander with:")
-	logger.Infof("   🎯 Campaign ID: %s", req.CampaignID)
-	logger.Infof("   📄 Landing Page ID: %s", req.LandingPageID)
-	logger.Infof("   🌐 Subdomain: %s", req.Subdomain)
-
-	// 🚀 Create the lander using our proven quick-deploy script
-	if err := createLander(req); err != nil {
-		logger.Errorf("💥 Failed to create lander: %v", err)
-		sendErrorResponse(w, fmt.Sprintf("Failed to create lander: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	fullDomain := req.Subdomain
-	if !strings.Contains(req.Subdomain, ".") {
-		fullDomain = req.Subdomain + ".puritysalt.com"
-	}
-
-	response := CreateLanderResponse{
-		Success:   true,
-		Message:   "🎉 Lander created successfully!",
-		Subdomain: fullDomain,
-		URL:       "https://" + fullDomain,
-	}
-
-	logger.Infof("✅ Lander created successfully: https://%s", fullDomain)
-	
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-func createLander(req CreateLanderRequest) error {
-	// 🛠️ Use our proven quick-deploy script
-	scriptPath := "/root/templates/quick-deploy.sh"
-	
-	fullDomain := req.Subdomain
-	if !strings.Contains(req.Subdomain, ".") {
-		fullDomain = req.Subdomain + ".puritysalt.com"
-	}
-
-	cmd := exec.Command("bash", scriptPath, fullDomain, req.CampaignID, req.LandingPageID)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	logger.Infof("🚀 Executing: bash %s %s %s %s", scriptPath, fullDomain, req.CampaignID, req.LandingPageID)
-	
-	return cmd.Run()
-}
-
-func listLandersHandler(w http.ResponseWriter, r *http.Request) {
-	logger.Info("📋 Listing all landers")
-	
-	// 📂 Read nginx sites-available directory
-	sitesDir := "/etc/nginx/sites-available"
-	files, err := os.ReadDir(sitesDir)
-	if err != nil {
-		logger.Errorf("💥 Failed to read sites directory: %v", err)
-		sendErrorResponse(w, "Failed to read landers", http.StatusInternalServerError)
-		return
-	}
-
-	var landers []map[string]string
-	for _, file := range files {
-		if !file.IsDir() && strings.Contains(file.Name(), ".puritysalt.com") {
-			landers = append(landers, map[string]string{
-				"domain": file.Name(),
-				"url":    "https://" + file.Name(),
-				"status": "🟢 Active",
-			})
+	go func() {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Fatalf("💥 Server failed to start: %v", err)
 		}
+	}()
+
+	logger.Info("🛰️ All satellites operational! Server ready for beautiful campaigns.")
+
+	<-quit
+	logger.Info("🔄 Graceful shutdown initiated...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Close deployment queue and wait for workers to finish
+	close(deployQueue)
+	workers.Wait()
+
+	if err := server.Shutdown(ctx); err != nil {
+		logger.Errorf("💥 Server forced to shutdown: %v", err)
 	}
 
-	response := map[string]interface{}{
-		"success": true,
-		"count":   len(landers),
-		"landers": landers,
-	}
-
-	logger.Infof("📊 Found %d active landers", len(landers))
-	
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	logger.Info("✨ ServerTrack Satellites shutdown complete. Beautiful campaigns await!")
 }
 
-func sendErrorResponse(w http.ResponseWriter, message string, statusCode int) {
-	response := CreateLanderResponse{
-		Success: false,
-		Error:   message,
-	}
-	
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(response)
-}
-
-func loggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		
-		// 🎨 Beautiful request logging
-		logger.Infof("🔄 %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
-		
-		next.ServeHTTP(w, r)
-		
-		duration := time.Since(start)
-		logger.Infof("✅ %s %s completed in %v", r.Method, r.URL.Path, duration)
-	})
-}

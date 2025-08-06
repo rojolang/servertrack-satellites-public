@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# 🚀 RojoLang API Deployment Script
-# Beautiful, simple deployment with lots of logging
+# ✨ RojoLang API Elegant Deployment Script
+# Sophisticated automation with beautiful logging
 
 set -e
 
-echo "🚀 RojoLang API Deployment Starting..."
-echo "🎯 KIFSS Mode: Keep It Freaking Simple Stupid"
+echo "✨ RojoLang API - Elegant Deployment Initiating..."
+echo "🎯 Sophisticated automation, effortless results"
 
 # Colors for beautiful output
 RED='\033[0;31m'
@@ -79,5 +79,5 @@ else
     error "Failed to start RojoLang API service"
 fi
 
-log "🎯 Deployment completed successfully!"
-echo "🚀 RojoLang API is ready to create beautiful landers!"
+log "✨ Elegant deployment completed successfully!"
+echo "🌟 RojoLang API - Sophisticated automation ready for beautiful campaigns!"

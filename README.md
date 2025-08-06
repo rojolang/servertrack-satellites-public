@@ -1,20 +1,22 @@
-# 🚀 RojoLang API - Beautiful Lander Generation Service
+# 🛰️ ServerTrack Satellites - Elegant Campaign Automation
 
-## Overview
-Simple, beautiful REST API for generating landing page campaigns with Voluum tracking integration. Built with the **Keep It Freaking Simple Stupid (KIFSS)** philosophy.
+## Overview  
+Sophisticated satellite-based REST API for deploying beautiful landing page campaigns with seamless Voluum tracking integration. Engineered for elegance, built for performance, designed for scale.
 
-## 🎯 Features
-- ✅ RESTful API for lander creation
-- ✅ Beautiful logging with emojis
-- ✅ Automatic nginx configuration
-- ✅ SSL certificate automation
-- ✅ Voluum tracking integration
-- ✅ Facebook ad compliance
+## 🛰️ Satellite Features
+- 🎨 **Beautiful RESTful API** with intelligent satellite deployment management
+- 🌟 **Sophisticated logging** with real-time satellite insights and emoji indicators
+- ⚡ **Automated nginx configuration** with intelligent proxy routing and load balancing
+- 🔐 **SSL certificate automation** for secure, professional satellite deployments  
+- 📊 **Seamless Voluum tracking** with parameter injection and click handling
+- 🛡️ **Facebook ad compliance** with stealth tracking and clean URLs
+- 🚀 **One-liner deployment** for instant satellite server setup
+- 💎 **Production-ready systemd service** with graceful restarts and monitoring
 
 ## 🔧 API Endpoints
 
 ### POST /api/v1/lander
-Create a new landing page with tracking configuration.
+Deploy a new satellite landing page with tracking configuration.
 
 **Request Body:**
 ```json
@@ -29,14 +31,14 @@ Create a new landing page with tracking configuration.
 ```json
 {
   "success": true,
-  "message": "🎉 Lander created successfully!",
-  "subdomain": "test.puritysalt.com",
+  "message": "🛰️ Satellite deployed successfully! Your beautiful lander is live and tracking.",
+  "subdomain": "test.puritysalt.com", 
   "url": "https://test.puritysalt.com"
 }
 ```
 
 ### GET /api/v1/landers
-List all active landers.
+List all active satellite deployments.
 
 **Response:**
 ```json
@@ -54,7 +56,7 @@ List all active landers.
 ```
 
 ### GET /health
-Health check endpoint.
+Satellite system health check endpoint.
 
 ## 🚀 Quick Start
 
@@ -121,6 +123,63 @@ Check logs for beautiful real-time monitoring:
 tail -f /var/log/rojolang-api.log
 ```
 
+## 🚀 One-Liner Installation
+
+Install ServerTrack Satellites on any Ubuntu 24.04 server with this beautiful one-liner:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/rojolang/servertrack-satellites/main/install.sh | bash
+```
+
+Or manually:
+
+```bash
+git clone https://github.com/rojolang/servertrack-satellites.git
+cd servertrack-satellites
+chmod +x install.sh
+./install.sh
+```
+
+## ⚡ New Enhanced Features (v2.0.0)
+
+### 🎨 Beautiful Logging & Monitoring
+- **JSON structured logging** with request tracing
+- **Real-time metrics** endpoint with system performance data  
+- **Request ID tracking** for complete request lifecycle visibility
+- **Beautiful emoji indicators** for instant status recognition
+
+### 🚀 Concurrency & Performance  
+- **Worker pool architecture** with configurable concurrent deployments
+- **Buffered deployment queue** for handling traffic spikes elegantly
+- **Graceful shutdown handling** with proper resource cleanup
+- **Memory and CPU monitoring** with automatic optimization
+
+### 🛡️ Enhanced Security & Middleware
+- **Rate limiting** with intelligent IP-based throttling
+- **Request validation** with comprehensive input sanitization  
+- **Error recovery** with panic handling and graceful degradation
+- **CORS security** with proper header management
+
+### 📊 Advanced Monitoring
+- **GET /metrics** - Real-time system performance metrics
+- **GET /health** - Comprehensive health monitoring with system stats
+- **GET /api/v1/status/{id}** - Deployment status tracking
+- **Beautiful response times** and latency tracking
+
+### 💎 Professional Grade Features
+- **Deployment queuing** for handling multiple simultaneous requests
+- **Request/response timing** with microsecond precision
+- **System resource monitoring** (memory, CPU, goroutines)
+- **Production-ready logging** with structured JSON output
+
+## 📈 Performance Metrics
+
+- **Concurrent Workers**: 2x CPU cores for optimal throughput
+- **Queue Capacity**: 100 simultaneous deployments  
+- **Request Timeout**: 30 seconds with graceful handling
+- **Memory Optimized**: Automatic garbage collection monitoring
+- **Zero Downtime**: Graceful shutdown with request completion
+
 ---
 
-**Built with ❤️ using the KIFSS philosophy - Keep It Freaking Simple Stupid**
+**🛰️ Built with elegant automation - ServerTrack Satellites Team**
