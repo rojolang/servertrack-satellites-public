@@ -811,3 +811,15 @@ echo -e "${GREEN}✨ ServerTrack Satellites is fully operational and ready for c
 # Log installation completion
 log "Installation completed at $(date)"
 log "Total installation time: ${SECONDS} seconds"
+
+# Self-destruct - delete this installer script for security
+echo ""
+echo -e "${YELLOW}🔥 Self-destructing installer for security...${NC}"
+sleep 2
+SCRIPT_PATH="$0"
+if [ -f "$SCRIPT_PATH" ] && [ "$SCRIPT_PATH" != "/dev/stdin" ]; then
+    rm -f "$SCRIPT_PATH"
+    echo -e "${GREEN}✅ Installer script removed successfully${NC}"
+else
+    echo -e "${CYAN}ℹ️  Installer was run from pipe - no cleanup needed${NC}"
+fi

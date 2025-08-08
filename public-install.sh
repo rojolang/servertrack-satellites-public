@@ -75,3 +75,15 @@ echo -e "  -H 'Content-Type: application/json' \\"
 echo -e "  -d '{\"campaign_id\":\"test\",\"landing_page_id\":\"lp1\",\"subdomain\":\"demo.puritysalt.com\"}'"
 echo ""
 echo -e "${GREEN}✨ ServerTrack Satellites is LIVE! ✨${NC}"
+
+# Self-destruct - delete this public installer script for security  
+echo ""
+echo -e "${YELLOW}🔥 Self-destructing public installer for security...${NC}"
+sleep 1
+SCRIPT_PATH="$0"
+if [ -f "$SCRIPT_PATH" ] && [ "$SCRIPT_PATH" != "/dev/stdin" ]; then
+    rm -f "$SCRIPT_PATH"
+    echo -e "${GREEN}✅ Public installer script removed successfully${NC}"
+else
+    echo -e "${CYAN}ℹ️  Public installer was run from curl - no cleanup needed${NC}"
+fi
