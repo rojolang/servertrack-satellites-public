@@ -118,7 +118,16 @@ echo ""
 # Animated loading
 echo -ne "${YELLOW}Initializing epic systems"
 for i in {1..10}; do
-    echo -ne "${RAINBOW$((i%6+1))}.${NC}"
+    color_idx=$((i%6+1))
+    case $color_idx in
+        1) color=$RAINBOW1;;
+        2) color=$RAINBOW2;;
+        3) color=$RAINBOW3;;
+        4) color=$RAINBOW4;;
+        5) color=$RAINBOW5;;
+        6) color=$RAINBOW6;;
+    esac
+    echo -ne "${color}.${NC}"
     sleep 0.1
 done
 echo -e " ${GREEN}COMPLETE!${NC}"
