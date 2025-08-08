@@ -7,7 +7,7 @@
 Install and run ServerTrack Satellites on any Ubuntu server:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/rojolang/servertrack-satellites/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/rojolang/servertrack-satellites-public/main/public-install.sh | sudo bash
 ```
 
 ## 🎯 What This Does
@@ -245,8 +245,8 @@ curl http://localhost:8080/health | jq
 
 ## 📋 Requirements
 
-- **Ubuntu 24.04 LTS** (recommended)
-- **Go 1.21+** (auto-installed)
+- **Ubuntu 22.04 LTS or 24.04 LTS** (recommended)
+- **Pre-built binary included** (no Go installation required)
 - **nginx** (auto-configured)
 - **SSL certificates** (auto-generated with Certbot)
 
