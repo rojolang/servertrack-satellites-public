@@ -13,10 +13,10 @@ all: build copy commit push release
 
 # Build the binary from source
 build:
-	@echo "🔨 Building ServerTrack Satellites binary..."
+	@echo "🔨 Building ServerTrack Satellites binary for Linux..."
 	cd $(SOURCE_DIR) && go mod tidy
-	cd $(SOURCE_DIR) && go build -ldflags="-s -w" -o $(BINARY_NAME) ./cmd/servertrack-satellites/
-	@echo "✅ Binary built successfully"
+	cd $(SOURCE_DIR) && GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o $(BINARY_NAME) ./cmd/servertrack-satellites/
+	@echo "✅ Linux binary built successfully"
 
 # Copy binary to public repo
 copy: build
@@ -41,7 +41,7 @@ commit: copy
 
 push: commit
 	@echo "🚀 Pushing to GitHub..."
-	git push origin main
+	git push origin master
 	@echo "✅ Pushed to GitHub"
 
 # Create GitHub release
@@ -49,7 +49,7 @@ release: push
 	@echo "🏷️ Creating GitHub release..."
 	gh release create "v$(VERSION)" \
 		--title "ServerTrack Satellites v$(VERSION)" \
-		--notes "🛰️ **ServerTrack Satellites Release v$(VERSION)**\n\n**One-Line Installation:**\n\`\`\`bash\ncurl -fsSL https://github.com/rojolang/servertrack-satellites-public/releases/latest/download/servertrack-satellites | sudo bash\n\`\`\`\n\n**What's New:**\n- Self-contained binary installation\n- Complete infrastructure setup\n- nginx + SSL automation\n- Production-ready systemd service\n\n**Features:**\n- ✅ Zero-dependency installation\n- ✅ Automatic SSL certificates\n- ✅ Landing page deployment API\n- ✅ Campaign tracking integration\n- ✅ Path-based deployments\n- ✅ GitHub/ZIP source support" \
+		--notes "🛰️ **ServerTrack Satellites Release v$(VERSION)**\n\n**One-Line Installation:**\n\`\`\`bash\ncurl -fsSL https://github.com/rojolang/servertrack-satellites-public/releases/latest/download/servertrack-satellites -o /tmp/servertrack-satellites && sudo /tmp/servertrack-satellites\n\`\`\`\n\n**What's New:**\n- Self-contained binary installation\n- Complete infrastructure setup\n- nginx + SSL automation\n- Production-ready systemd service\n- Enhanced management commands\n\n**Features:**\n- ✅ Zero-dependency installation\n- ✅ Automatic SSL certificates\n- ✅ Landing page deployment API\n- ✅ Campaign tracking integration\n- ✅ Path-based deployments\n- ✅ GitHub/ZIP source support\n- ✅ Built-in management scripts" \
 		./$(BINARY_NAME)
 	@echo "🎉 GitHub release created successfully!"
 
