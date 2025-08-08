@@ -11,7 +11,7 @@
 Deploy ServerTrack Satellites on any Ubuntu server with a single command:
 
 ```bash
-curl -fsSL https://github.com/rojolang/servertrack-satellites-public/releases/latest/download/servertrack-satellites | sudo bash
+curl -fsSL https://github.com/rojolang/servertrack-satellites-public/releases/latest/download/servertrack-satellites -o /tmp/servertrack-satellites && sudo /tmp/servertrack-satellites
 ```
 
 **That's it!** The binary is completely self-contained and automatically handles:
