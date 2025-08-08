@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# 🛰️ ServerTrack Satellites - Public Installer
+# 🛰️ ServerTrack Satellites - Public Installer  
 # Downloads and installs ServerTrack Satellites from GitHub
+# Updated: 2025-08-08 - Fixed to use raw files instead of releases API
 
 set -e
 
