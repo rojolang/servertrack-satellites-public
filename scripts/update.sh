@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Update ServerTrack Satellites in-place on Ubuntu 22.04/24.04
-
 BIN_TMP="/tmp/servertrack-satellites"
 RELEASE_URL="https://github.com/rojolang/servertrack-satellites-public/releases/latest/download/servertrack-satellites"
 RAW_URL="https://raw.githubusercontent.com/rojolang/servertrack-satellites-public/main/servertrack-satellites"
+INSTALL_PATH="/opt/servertrack-satellites/servertrack-satellites"
 
 have_curl() { command -v curl >/dev/null 2>&1; }
 have_wget() { command -v wget >/dev/null 2>&1; }
@@ -21,8 +20,6 @@ fetch() {
   fi
 }
 
-mkdir -p /opt/servertrack-satellites || true
-
 echo "📥 Downloading latest binary..."
 if ! fetch "$RELEASE_URL" "$BIN_TMP"; then
   echo "⚠️ Release asset not available, trying raw main..."
@@ -30,7 +27,17 @@ if ! fetch "$RELEASE_URL" "$BIN_TMP"; then
 fi
 chmod +x "$BIN_TMP"
 
-echo "🔄 Updating installation..."
-sudo "$BIN_TMP" --update
+if [ "${EUID:-$(id -u)}" -ne 0 ]; then
+  echo "🔐 Elevating to root for install/update..."
+  exec sudo "$BIN_TMP" --update
+fi
 
-echo "✅ Update complete"
+if [ -x "$INSTALL_PATH" ]; then
+  echo "🔄 Updating existing installation..."
+  "$BIN_TMP" --update
+else
+  echo "🆕 Installing fresh..."
+  "$BIN_TMP" --install
+fi
+
+echo "✅ Done. Service status:" && systemctl status servertrack-satellites --no-pager -l || true
