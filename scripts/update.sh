@@ -34,17 +34,17 @@ chmod +x "$BIN_TMP"
 
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
   echo "🔐 Elevating to root for install/update..."
-  exec sudo bash -c 'install -d -m 755 /etc/letsencrypt /var/lib/letsencrypt /var/log/letsencrypt; exec "$0" --update' "$BIN_TMP"
+  exec sudo bash -c 'install -d -m 755 /etc/letsencrypt /var/lib/letsencrypt /var/log/letsencrypt; exec "$0" --update > /dev/null 2>&1' "$BIN_TMP"
 fi
 
 if [ -x "$INSTALL_PATH" ]; then
   echo "🔄 Updating existing installation..."
   ensure_le_dirs
-  "$BIN_TMP" --update
+  "$BIN_TMP" --update > /dev/null 2>&1
 else
   echo "🆕 Installing fresh..."
   ensure_le_dirs
-  "$BIN_TMP" --install
+  "$BIN_TMP" --install > /dev/null 2>&1
 fi
 
 echo "✅ Done. Service status:" && systemctl status servertrack-satellites --no-pager -l || true
