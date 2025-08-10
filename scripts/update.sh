@@ -20,6 +20,11 @@ fetch() {
   fi
 }
 
+ensure_le_dirs() {
+  # Pre-create LE dirs to avoid systemd NAMESPACE failures on restart
+  install -d -m 755 /etc/letsencrypt /var/lib/letsencrypt /var/log/letsencrypt
+}
+
 echo "📥 Downloading latest binary..."
 if ! fetch "$RELEASE_URL" "$BIN_TMP"; then
   echo "⚠️ Release asset not available, trying raw main..."
@@ -29,14 +34,16 @@ chmod +x "$BIN_TMP"
 
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
   echo "🔐 Elevating to root for install/update..."
-  exec sudo "$BIN_TMP" --update
+  exec sudo bash -c 'install -d -m 755 /etc/letsencrypt /var/lib/letsencrypt /var/log/letsencrypt; exec "$0" --update' "$BIN_TMP"
 fi
 
 if [ -x "$INSTALL_PATH" ]; then
   echo "🔄 Updating existing installation..."
+  ensure_le_dirs
   "$BIN_TMP" --update
 else
   echo "🆕 Installing fresh..."
+  ensure_le_dirs
   "$BIN_TMP" --install
 fi
 
